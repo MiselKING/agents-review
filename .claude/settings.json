@@ -1,0 +1,51 @@
+{
+    "permissions": {
+        "ask": [
+            "Read(./docs/_project-plan.md)",
+            "Read(./docs/AGENTS.md.example)",
+            "Read(./docs/private/**)",
+            "Edit(**/AGENTS.md)",
+            "Edit(**/CLAUDE.md)",
+            "Edit(./REVIEW.md)",
+            "Edit(./.claude/**)",
+            "Edit(./.github/**)",
+            "Edit(./.devcontainer/**)",
+            "Edit(./pnpm-workspace.yaml)",
+            "Edit(./packages/db/src/schema.ts)",
+            "Bash(pnpm add *)",
+            "Bash(pnpm * add *)",
+            "Bash(pnpm update *)",
+            "Bash(pnpm * update *)",
+            "Bash(pnpm up *)",
+            "Bash(pnpm remove *)",
+            "Bash(pnpm * remove *)"
+        ],
+        "deny": [
+            "Read(**/.env)",
+            "Read(**/.env.local)",
+            "Read(**/.env.*.local)",
+            "Read(**/.env.dev)",
+            "Read(**/.env.development)",
+            "Read(**/.env.prod)",
+            "Read(**/.env.production)",
+            "Read(**/.env.staging)",
+            "Read(**/.env.test)",
+            "Edit(./apps/api/src/generated/**)",
+            "Edit(./apps/web/src/gql/**)",
+            "Edit(./packages/db/drizzle/**)",
+            "Bash(git push --force*)",
+            "Bash(git push * --force*)",
+            "Bash(git push -f*)",
+            "Bash(git push * -f*)",
+            "Bash(git push *+*)",
+            "Bash(git push * main)",
+            "Bash(git push *:main)",
+            "Bash(gh pr merge *)",
+            "Bash(gh pr review *)",
+            "Bash(npm *)",
+            "Bash(npx *)",
+            "Bash(yarn *)",
+            "Bash(*drizzle-kit push*)"
+        ]
+    }
+}
