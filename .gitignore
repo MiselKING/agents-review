@@ -1,0 +1,29 @@
+# Secrets: every .env file except the template
+.env*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+
+# Tests
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# Claude Code: personal settings and worktrees
+.claude/settings.local.json
+.claude/worktrees/
+
+# Logs and OS/editor files
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+
+# Personal reference material; never committed
+docs/private/
