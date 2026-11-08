@@ -1,0 +1,55 @@
+name: Feature
+description: Ask for new behavior or a change to existing behavior.
+labels: [feature]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One feature per issue. Describe the outcome you want; the implementation gets planned on the issue.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who needs this and why. What can't they do today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What to build
+      description: The behavior you want, from the user's point of view. Include API or UI details only if they matter.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Outcomes someone can check, one per line. The work is done when every item is true.
+      placeholder: |
+        - [ ] Deleting an audience asks for confirmation first
+        - [ ] Cancelling the confirmation keeps the audience
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where the change probably lands. Pick "Not sure" if you don't know.
+      multiple: true
+      options:
+        - Web app
+        - API
+        - Sync worker
+        - Mock ad platform
+        - Database
+        - Not sure
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What this issue should not change.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Links, examples, screenshots, anything else.

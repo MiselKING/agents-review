@@ -1,0 +1,67 @@
+name: Bug
+description: Something doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe what you see, not what you think the cause is. The fix starts with a test that reproduces your steps.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong, in a sentence or two.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps from a fresh start, with any input values you used.
+      placeholder: |
+        1. Open the audience builder
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Outcomes someone can check, one per line.
+      placeholder: |
+        - [ ] Following the steps above gives the expected behavior
+        - [ ] A test reproduces the bug and passes with the fix
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where you saw it. Pick "Not sure" if you don't know.
+      multiple: true
+      options:
+        - Web app
+        - API
+        - Sync worker
+        - Mock ad platform
+        - Database
+        - Not sure
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error messages
+      description: Paste text output here. It's shown as code, so no formatting needed.
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Screenshots, how often it happens, anything else.
