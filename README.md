@@ -26,6 +26,18 @@ Postgres runs in Docker Compose with about 100k seeded rows. Nothing is hosted. 
 
 Local ports (defaults, all set from env so parallel worktrees can shift them): web 5173, API 4000, mock ad platform 4100, Postgres 5432.
 
+## Prerequisites
+Install these first:
+
+| Tool | Version | Get it |
+|---|---|---|
+| Node.js | 26 | [nodejs.org](https://nodejs.org) or a version manager like nvm or fnm (the repo's `.nvmrc` says 26) |
+| pnpm | 12 | [pnpm.io/installation](https://pnpm.io/installation) |
+| Docker | with Compose (`docker compose`) | [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows and macOS, Docker Engine on Linux |
+| Git | any recent | [git-scm.com](https://git-scm.com) |
+
+Then run the first-time setup command from [AGENTS.md](AGENTS.md#commands). On Windows, run it in Git Bash or PowerShell 7, because it uses `cp` and `&&`.
+
 ## The agent setup
 Flow: issue → agent builds on a branch → draft PR → CI → AI review → my review → merge. Agents never merge. Failed CI or requested changes go back to the agent.
 - Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (comparison, 30-day Pro trial)
