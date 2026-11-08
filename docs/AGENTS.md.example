@@ -1,0 +1,86 @@
+<!--
+  STARTER TEMPLATE. How to use it:
+  1. Fill in only the sections that apply. Delete any section you can't fill with something
+     an agent couldn't work out on its own by reading the repo.
+  2. Delete every HTML comment before committing. (Claude Code strips them, but other agents
+     read them as text and pay tokens for them.)
+  3. Target: 40–120 lines for a root file. Hard ceiling: ~150 lines / well under 32 KiB.
+  4. Every line must pass this test: "Would an agent make a mistake if this line were gone?"
+-->
+
+# AGENTS.md
+
+<!-- 1–2 lines. What this is + the stack. No history, no marketing. -->
+<Project name>: <one-line purpose>. <Language/framework/runtime + versions>, <package manager>.
+
+## Commands
+
+<!-- Exact, copy-pasteable commands. This is the most valuable section. Include the
+     non-obvious flags and the fast/scoped variants agents should prefer. -->
+- Install: `<cmd>`
+- Dev server: `<cmd>` (port <n>)
+- Test one file: `<cmd> path/to/file`   ← prefer this while iterating
+- Test all: `<cmd>`
+- Lint + typecheck: `<cmd>`
+- Format: `<cmd>`
+<!-- If something needs setup first (env var, local DB, docker, codegen), say so here:
+     - Requires `<ENV_VAR>`; copy `.env.example` to `.env`.
+     - Run `<codegen cmd>` after changing `<schema file>`. -->
+
+## Definition of done
+
+<!-- The checks an agent must run before saying it's finished. Agents will actually run these. -->
+Before finishing any change, run and pass:
+1. `<lint/typecheck cmd>`
+2. `<tests for the touched area>`
+3. <any other check, e.g. `<build cmd>` if you touched config>
+
+## Where things live
+
+<!-- NOT a directory tree or file-by-file tour (agents can `ls`). Only boundaries and
+     non-obvious placements that an agent would otherwise get wrong. -->
+- <New API endpoints go in `src/...`; register them in `src/.../routes.ts`>
+- <`generated/` is codegen output — never edit by hand; regenerate with `<cmd>`>
+- <Shared UI components: `packages/ui`; app-specific ones stay in the app>
+
+## Conventions
+
+<!-- Only rules that differ from language/framework defaults, or that a linter can't enforce.
+     Pair every "don't" with a "do" (and a path to the thing to use instead). -->
+- Don't <X>; use <Y> in `<path>` instead.
+- <Domain rule, e.g. "Money is integer cents (`Money` type in `src/lib/money.ts`), never floats.">
+- Follow the pattern in `<path/to/canonical/example.ts>` when adding a <thing>.
+
+<!-- Optional: a decision table when there are look-alike options agents mix up.
+| Need                  | Use                 | Not            |
+|-----------------------|---------------------|----------------|
+| Server state          | React Query         | Zustand        |
+| Client-only UI state  | Zustand             | Context        |
+-->
+
+## Gotchas
+
+<!-- Non-obvious things that have actually bitten agents or new teammates.
+     Add here when an agent makes the same mistake twice. -->
+- <e.g. "Tests share a DB; run with `--runInBand` or they flake.">
+- <e.g. "`config/legacy.ts` is still imported by billing — don't delete it.">
+
+## Boundaries
+
+- Always: <e.g. add/adjust tests for behavior you change>
+- Ask first: <e.g. adding dependencies, DB migrations, changing public APIs, deleting files>
+- Never: <e.g. commit secrets or `.env`; edit `generated/`; delete or skip failing tests to get green; push to `main`>
+
+## Git & PRs
+
+<!-- Only if you have conventions. Delete otherwise. -->
+- Branches: `<type>/<ticket>-<slug>`. Commits: <Conventional Commits / other>.
+- PR description: what changed, why, how it was tested.
+
+## More context (read only when relevant)
+
+<!-- Progressive disclosure: point to deeper docs with a trigger, instead of pasting them here.
+     Keep to ≤10 links. These are read on demand, so they cost nothing until needed. -->
+- Touching auth or sessions → read `docs/agents/auth.md`
+- Adding a DB migration → read `docs/agents/migrations.md`
+- Working inside `services/<x>/` → that folder has its own AGENTS.md
