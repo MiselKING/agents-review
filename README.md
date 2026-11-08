@@ -31,6 +31,7 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 - Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (comparison, 30-day Pro trial)
 - Reviewers: Claude, CodeRabbit, Copilot code review (about 5 PRs)
 - Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills, hooks, `.mcp.json`, dev container with a default-deny firewall. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
+- Writing issues: the issue forms on GitHub, or `/write-issue` in Claude Code with short notes (format in `.claude/skills/write-issue/SKILL.md`)
 - Side flows: Renovate dependency PRs, weekly docs sync, visual change requests
 - Measurement: 12 fixed tasks, run with a bare setup (Phase 4) and the full setup (Phase 7), 2 runs each
 - All tools free on a public repo. The only licensed extra is the Copilot Pro trial.
@@ -45,7 +46,7 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 
 | Package | Version | What it does | Why this one |
 |---|---|---|---|
-| pnpm | 11 | Installs dependencies; workspaces link the 7 packages together | Strict (no undeclared deps), fast, built-in monorepo support. 12 exists but is still opt-in |
+| pnpm | 12 | Installs dependencies; workspaces link the 7 packages together | Strict (no undeclared deps), fast, built-in monorepo support. |
 | Turborepo | 2.x | Runs scripts (test, lint, build) across all packages | Runs in dependency order and in parallel, and skips packages that didn't change |
 | TypeScript | 7 | Language and type checker | New native compiler, about 10x faster type checks |
 | React + Vite | Vite 8 | UI library + dev server and bundler | Standard choice; Vite 8 builds with Rolldown (Rust), much faster builds |
