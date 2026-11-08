@@ -1,0 +1,38 @@
+name: Visual change
+description: Change text, colors, spacing or layout in the web app. No new behavior.
+labels: [visual-change]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For changes to how a page looks or reads. If the page should do something new, use the Feature form instead.
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: Which page or screen.
+      placeholder: e.g. audience builder, audience list
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: What should change
+      description: What it looks like now and what you want instead. For text changes, give the exact new wording.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Paste or drag in a screenshot of the page as it is now, and mark what should change.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What you'll check on the before/after screenshots, one per line.
+      placeholder: |
+        - [ ] The page shows the new wording
+        - [ ] Nothing else on the page moves
+    validations:
+      required: true
