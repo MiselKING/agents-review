@@ -42,21 +42,26 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 - One-time setup rules (ports from env, Vite `strictPort`, `/graphql` proxy) live in the scaffold issue, not in AGENTS.md
 - Seed data comes with the data model in Phase 3; the Phase 1 scaffold has no tables
 
-## Core packages (checked 2026-11-06)
+## Core packages (checked 2026-11-08)
+
+Installed versions are pinned in `package.json` files and `pnpm-lock.yaml`; this table is the overview.
 
 | Package | Version | What it does | Why this one |
 |---|---|---|---|
+| Node.js | 26 (LTS) | Runtime for the API, services and tooling | Runs TypeScript directly (type stripping) and loads `.env` itself, so no tsx or dotenv |
 | pnpm | 12 | Installs dependencies; workspaces link the 7 packages together | Strict (no undeclared deps), fast, built-in monorepo support. |
 | Turborepo | 2.x | Runs scripts (test, lint, build) across all packages | Runs in dependency order and in parallel, and skips packages that didn't change |
 | TypeScript | 7 | Language and type checker | New native compiler, about 10x faster type checks |
 | React + Vite | Vite 8 | UI library + dev server and bundler | Standard choice; Vite 8 builds with Rolldown (Rust), much faster builds |
 | TanStack Query | 5 | Fetches and caches server data in the UI | Handles caching, refetching and pagination so the UI code stays small |
-| GraphQL Yoga | 5 | GraphQL server for the API | Light, built on the standard Fetch API, same team as GraphQL Code Generator |
-| GraphQL Code Generator | latest | Generates resolver types for the API and typed queries for the UI | API and UI share one typed contract; CI checks it's up to date. The UI calls the API with a small `fetch` wrapper inside TanStack Query, no extra GraphQL client |
-| DataLoader | latest | Batches database lookups in resolvers | Avoids one query per row (the N+1 problem) |
-| Drizzle ORM + drizzle-kit | 0.45 (stable) | Database queries + SQL migrations | SQL-first, good for dynamic filters; schema in TypeScript; reviewable SQL migrations. Upgrade to 1.0 once it's stable |
-| PostgreSQL | via Docker | Database | Standard; runs locally and in CI at no cost |
+| graphql (graphql-js) | 17 | GraphQL reference implementation used by Yoga and codegen | Required peer of both; current major |
+| GraphQL Yoga | 6 | GraphQL server for the API | Light, built on the standard Fetch API, same team as GraphQL Code Generator |
+| GraphQL Code Generator | CLI 8, plugins 7 | Generates resolver types for the API and typed queries for the UI | API and UI share one typed contract; CI checks it's up to date. The UI calls the API with a small `fetch` wrapper inside TanStack Query, no extra GraphQL client |
+| DataLoader | not installed yet | Batches database lookups in resolvers | Avoids one query per row (the N+1 problem). Added with the first resolver that reads the database |
+| Drizzle ORM + drizzle-kit | 0.45 / 0.31 (stable) | Database queries + SQL migrations | SQL-first, good for dynamic filters; schema in TypeScript; reviewable SQL migrations. Upgrade to 1.0 once it's stable |
+| node-postgres (pg) | 8 | Postgres driver for Drizzle | The standard Node driver; drizzle-kit uses it too |
+| PostgreSQL | 18 via Docker | Database | Standard; runs locally and in CI at no cost |
 | Vitest | 5 | Unit and integration tests | Fast, Vite-native. Each package has its own config |
-| Playwright | latest | End-to-end tests and screenshots | Agents use screenshots to check UI changes |
+| Playwright | 1.65 | End-to-end tests and screenshots | Agents use screenshots to check UI changes |
 | Oxlint (+ tsgolint) | 1.x / 7 | Linting, including type-aware rules | Works with TypeScript 7 (typescript-eslint doesn't yet); much faster than ESLint |
-| Oxfmt | beta | Code formatting | Prettier-compatible output, much faster. Prettier is the fallback if it causes trouble |
+| Oxfmt | 0.77 (beta) | Code formatting | Prettier-compatible output, much faster. Prettier is the fallback if it causes trouble |
