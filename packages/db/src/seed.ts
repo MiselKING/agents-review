@@ -1,6 +1,7 @@
 // Seed data arrives with the data model (Phase 3). For now this checks the connection.
 import { requireEnv } from '@agents-review/shared/env';
 import { sql } from 'drizzle-orm';
+
 import { createDb, describeDatabaseUrl } from './client.ts';
 
 const databaseUrl = requireEnv('DATABASE_URL');

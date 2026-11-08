@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
+
 import { createApp } from './app.ts';
 
 const server = createApp();

@@ -1,5 +1,6 @@
 import { typeDefs } from '@agents-review/shared/schema';
 import { createSchema, createYoga } from 'graphql-yoga';
+
 import type { Resolvers } from './generated/graphql.ts';
 
 const resolvers: Resolvers = {

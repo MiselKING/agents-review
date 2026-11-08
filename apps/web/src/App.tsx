@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+
 import { graphql } from './gql';
 import { execute } from './graphql/execute';
 

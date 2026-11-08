@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+
 import { yoga } from './yoga.ts';
 
 it('answers the hello query', async () => {

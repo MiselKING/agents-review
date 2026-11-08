@@ -1,8 +1,10 @@
 // Runs before `drizzle-kit migrate`. `docker compose up -d` returns before Postgres
 // accepts connections, so wait for it instead of failing on the first try.
 import { setTimeout as sleep } from 'node:timers/promises';
+
 import { requireEnv } from '@agents-review/shared/env';
 import { Client } from 'pg';
+
 import { describeDatabaseUrl, findPortMismatch } from './url.ts';
 
 const TIMEOUT_MS = 30_000;
@@ -18,6 +20,8 @@ if (mismatch) {
 }
 
 const deadline = Date.now() + TIMEOUT_MS;
+// Retries must run one after another, so awaiting inside the loop is the point here.
+/* oxlint-disable no-await-in-loop */
 for (;;) {
   const client = new Client({ connectionString: databaseUrl });
   try {
@@ -36,3 +40,4 @@ for (;;) {
     await sleep(RETRY_MS);
   }
 }
+/* oxlint-enable no-await-in-loop */

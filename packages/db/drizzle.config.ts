@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+
 import { defineConfig } from 'drizzle-kit';
 
 // drizzle-kit runs from packages/db; load the repo-root .env (it doesn't override real env vars).
