@@ -46,7 +46,7 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 
 | Package | Version | What it does | Why this one |
 |---|---|---|---|
-| pnpm | 11 | Installs dependencies; workspaces link the 7 packages together | Strict (no undeclared deps), fast, built-in monorepo support. 12 exists but is still opt-in |
+| pnpm | 12 | Installs dependencies; workspaces link the 7 packages together | Strict (no undeclared deps), fast, built-in monorepo support. |
 | Turborepo | 2.x | Runs scripts (test, lint, build) across all packages | Runs in dependency order and in parallel, and skips packages that didn't change |
 | TypeScript | 7 | Language and type checker | New native compiler, about 10x faster type checks |
 | React + Vite | Vite 8 | UI library + dev server and bundler | Standard choice; Vite 8 builds with Rolldown (Rust), much faster builds |
