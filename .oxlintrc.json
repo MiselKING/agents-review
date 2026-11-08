@@ -1,0 +1,62 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": {
+    "typeAware": true,
+    "denyWarnings": true
+  },
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "node", "promise", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "ignorePatterns": ["apps/api/src/generated/**", "apps/web/src/gql/**", "packages/db/drizzle/**"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@agents-review/web",
+            "message": "Apps and services import shared code from packages/* only."
+          },
+          {
+            "name": "@agents-review/api",
+            "message": "Apps and services import shared code from packages/* only."
+          },
+          {
+            "name": "@agents-review/sync-worker",
+            "message": "Apps and services import shared code from packages/* only."
+          },
+          {
+            "name": "@agents-review/mock-destination",
+            "message": "Apps and services import shared code from packages/* only."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["**/apps/**", "**/services/**"],
+            "message": "Apps and services import shared code from packages/* only."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/**/*.{ts,tsx}"],
+      "plugins": [
+        "eslint",
+        "typescript",
+        "unicorn",
+        "oxc",
+        "import",
+        "promise",
+        "react",
+        "jsx-a11y"
+      ],
+      "rules": {
+        "react/react-in-jsx-scope": "off"
+      }
+    }
+  ]
+}

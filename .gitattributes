@@ -1,0 +1,3 @@
+# LF everywhere, so generated code and formatting match on Windows, macOS and Linux.
+* text=auto eol=lf
+*.png binary

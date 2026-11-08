@@ -1,0 +1,37 @@
+{
+  "name": "agents-review",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter ./apps/web run test:e2e",
+    "lint": "oxlint",
+    "typecheck": "tsc -p tsconfig.json && turbo run typecheck",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "codegen": "graphql-codegen --config codegen.ts",
+    "codegen:check": "node scripts/codegen-check.ts",
+    "db:generate": "pnpm --filter ./packages/db run db:generate",
+    "db:migrate": "pnpm --filter ./packages/db run db:migrate",
+    "db:seed": "pnpm --filter ./packages/db run db:seed"
+  },
+  "devDependencies": {
+    "@graphql-codegen/cli": "^8.0.0",
+    "@graphql-codegen/client-preset": "^7.0.0",
+    "@graphql-codegen/typescript": "^7.0.0",
+    "@graphql-codegen/typescript-resolvers": "^7.0.0",
+    "@types/node": "catalog:",
+    "graphql": "catalog:",
+    "oxfmt": "^0.77.0",
+    "oxlint": "^1.92.0",
+    "oxlint-tsgolint": "^7.0.2006",
+    "turbo": "^2.11.10",
+    "typescript": "catalog:"
+  },
+  "engines": {
+    "node": ">=26 <27",
+    "pnpm": ">=12 <13"
+  },
+  "packageManager": "pnpm@12.18.0"
+}

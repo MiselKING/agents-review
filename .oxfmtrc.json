@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "printWidth": 100,
+  "ignorePatterns": [
+    "apps/api/src/generated/**",
+    "apps/web/src/gql/**",
+    "packages/db/drizzle/**",
+    "pnpm-lock.yaml",
+    "**/*.md",
+    "docs/**",
+    ".claude/**",
+    ".github/**"
+  ]
+}
