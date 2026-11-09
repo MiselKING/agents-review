@@ -16,7 +16,8 @@ export default defineConfig({
   testDir: './e2e',
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  reporter: isCI ? 'github' : 'list',
+  // In CI, the HTML report (with traces) is uploaded as an artifact when e2e fails.
+  reporter: isCI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://localhost:${webPort}`,
     trace: 'on-first-retry',

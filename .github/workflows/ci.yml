@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  # Every PR, whatever its target branch (main today, maybe develop or qa later). Drafts included.
+  pull_request:
+  # Long-lived branches. Add develop, qa or others here when they exist.
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to a PR cancels its older run. Runs on long-lived branches always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Installs pnpm from package.json `packageManager`, Node from .nvmrc, then runs `pnpm install`.
+      - id: install
+        uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          cache: true
+          require-lockfile: true
+      # Each check runs even if an earlier one failed, so one run shows every failure.
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm lint
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm typecheck
+      - name: Unit tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm test
+      - name: Generated code is up to date
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm codegen:check
+      - name: Format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm format:check
+
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          cache: true
+          # Only the checks job saves the cache; parallel saves of the same key collide.
+          save-cache: false
+          install: false
+      # The AGENTS.md first-time setup command, exactly as written: a fresh clone must work.
+      - name: First-time setup
+        run: cp .env.example .env && pnpm install && docker compose up -d && pnpm db:migrate && pnpm db:seed
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        with:
+          cache: true
+          save-cache: false
+          require-lockfile: true
+      - run: cp .env.example .env
+      - name: Install Chromium with its Linux system packages
+        run: pnpm --filter ./apps/web exec playwright install --with-deps chromium
+      - name: E2E tests
+        run: pnpm test:e2e
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+
+  # The one check that rulesets require, on any branch.
+  ci:
+    if: ${{ always() }}
+    needs: [checks, setup, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All jobs passed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: |
+          echo "At least one job did not pass: ${{ join(needs.*.result, ', ') }}"
+          exit 1
