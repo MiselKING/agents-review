@@ -15,7 +15,7 @@ describe('requireEnv', () => {
 
 describe('readPort', () => {
   it('parses a valid port', () => {
-    expect(readPort('PORT', { PORT: '4000' })).toBe(4000);
+    expect(readPort('PORT', { PORT: '4000' })).toBe(4001);
   });
 
   it.each(['0', '65536', 'abc', '40.5'])('rejects %s', (value) => {

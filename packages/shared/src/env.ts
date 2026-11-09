@@ -19,3 +19,6 @@ export function readPort(name: string, env: Env = process.env): number {
   }
   return port;
 }
+
+// CI failure demo: lint must reject this.
+export const demo: any = 1;
