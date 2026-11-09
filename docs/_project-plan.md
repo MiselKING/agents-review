@@ -294,7 +294,6 @@ A public repo with agents that write code is an attack surface, so build these i
 
 - **Agents never merge.** Three rulesets enforce it; rulesets are free on public repos ([GitHub docs](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets)). When several rulesets target the same branch, their rules are combined and the strictest version applies.
   - **Ruleset "main - PR and checks":** ![Ruleset 1](project-plan-media/ruleset1.png) Add "Require status checks to pass" once CI exists (Phase 1, CI bullet).
-  ![Ruletset 1 CI](project-plan-media/ruleset1-ci.png)
   - **Ruleset "main - approval":** ![Ruleset 2](project-plan-media/ruleset2.png) An author can't approve their own PR, and on PRs you asked Copilot to create, your approval doesn't count either ([GitHub docs](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/review-copilot-prs)). So you merge your own and Copilot's PRs through this bypass, while the first ruleset still requires CI. Renovate PRs you approve, then merge. Confirm on the first PR that the bypass skips only the approval rule.
   - **Ruleset "No force pushes"** (all branches except `renovate/**/*`): ![Ruleset 3](project-plan-media/ruleset3.png) Renovate updates a branch by rebuilding it on top of the base branch, which needs a force push ([Renovate docs](https://docs.renovatebot.com/updating-rebasing/)).
 
