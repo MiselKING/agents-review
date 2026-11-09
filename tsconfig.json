@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["codegen.ts", "scripts/**/*.ts"]
+  "include": ["codegen.ts"]
 }

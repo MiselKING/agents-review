@@ -11,7 +11,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "codegen": "graphql-codegen --config codegen.ts",
-    "codegen:check": "node scripts/codegen-check.ts",
+    "codegen:check": "graphql-codegen --config codegen.ts --check",
     "db:generate": "pnpm --filter ./packages/db run db:generate",
     "db:migrate": "pnpm --filter ./packages/db run db:migrate",
     "db:seed": "pnpm --filter ./packages/db run db:seed"
