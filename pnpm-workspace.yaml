@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - services/*
+  - packages/*
+
+# Fail install on the wrong Node or pnpm version (see engines in package.json).
+engineStrict: true
+
+# Install scripts, reviewed. esbuild (via drizzle-kit) works without its postinstall,
+# which only optimizes the binary, so it stays off.
+allowBuilds:
+  esbuild: false
+
+# Versions shared by several packages. Packages reference them with "catalog:".
+catalog:
+  '@types/node': ^26.6.6
+  graphql: ^17.1.0
+  typescript: ^7.0.2
+  vitest: ^5.1.0

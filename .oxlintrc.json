@@ -1,0 +1,78 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": {
+    "typeAware": true,
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "deny"
+  },
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "node", "promise", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "ignorePatterns": ["apps/api/src/generated/**", "apps/web/src/gql/**", "packages/db/drizzle/**"],
+  "rules": {
+    "no-new-func": "error",
+    "no-script-url": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-deprecated": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@agents-review/web",
+            "message": "Apps and services import shared code from packages/* only."
+          },
+          {
+            "name": "@agents-review/api",
+            "message": "Apps and services import shared code from packages/* only."
+          },
+          {
+            "name": "@agents-review/sync-worker",
+            "message": "Apps and services import shared code from packages/* only."
+          },
+          {
+            "name": "@agents-review/mock-destination",
+            "message": "Apps and services import shared code from packages/* only."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["**/apps/**", "**/services/**"],
+            "message": "Apps and services import shared code from packages/* only."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/**/*.{ts,tsx}"],
+      "plugins": [
+        "eslint",
+        "typescript",
+        "unicorn",
+        "oxc",
+        "import",
+        "promise",
+        "react",
+        "jsx-a11y"
+      ],
+      "rules": {
+        "react/no-danger": "error",
+        "react/react-in-jsx-scope": "off"
+      }
+    }
+  ]
+}
