@@ -42,6 +42,7 @@ body:
         - Sync worker
         - Mock ad platform
         - Database
+        - CI
         - Not sure
   - type: textarea
     id: out-of-scope
