@@ -56,6 +56,8 @@ jobs:
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
           cache: true
+          # Only the checks job saves the cache; parallel saves of the same key collide.
+          save-cache: false
           install: false
       # The AGENTS.md first-time setup command, exactly as written: a fresh clone must work.
       - name: First-time setup
@@ -71,6 +73,7 @@ jobs:
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
           cache: true
+          save-cache: false
           require-lockfile: true
       - run: cp .env.example .env
       - name: Install Chromium with its Linux system packages
