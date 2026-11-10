@@ -18,7 +18,3 @@ if [ "${image_version}" != "${locked_version}" ]; then
   echo "WARNING: the image has Playwright ${image_version}, but the lockfile has ${locked_version}." >&2
   echo "Update the playwright feature version in .devcontainer/devcontainer.json and rebuild." >&2
 fi
-
-if [ -n "${GH_TOKEN:-}" ]; then
-  gh auth setup-git
-fi

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Default-deny firewall, from Anthropic's reference dev container (anthropics/claude-code).
-# Changes from the reference: no telemetry hosts (sentry.io, statsig.com), the postgres
-# service is allowed, and IPv6 is blocked too.
+# Changes from the reference: no telemetry hosts (sentry.io, statsig.com), no outbound SSH
+# to any host (git uses HTTPS), the postgres service is allowed, and IPv6 is blocked too.
 # IPs are resolved once, when this runs (container start). Hosts that change IPs later are
 # blocked until the next restart.
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
@@ -38,10 +38,6 @@ fi
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
 # Allow inbound DNS responses
 iptables -A INPUT -p udp --sport 53 -j ACCEPT
-# Allow outbound SSH
-iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
-# Allow inbound SSH responses
-iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
 # Allow localhost
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT

@@ -15,10 +15,17 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh \
   && echo "vscode ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/vscode-firewall \
   && chmod 0440 /etc/sudoers.d/vscode-firewall
 
+# git uses gh for github.com, and gh uses GH_TOKEN when it's set. No token is stored here,
+# so a token passed in later (devcontainer exec) works for git push without extra setup.
+RUN git config --system credential.https://github.com.helper '!gh auth git-credential'
+
 # Claude Code from Anthropic's native installer, pinned, with auto-update off.
 # ~/.claude is created here so the named volume mounted over it is owned by vscode.
+# CLAUDE_CONFIG_DIR is set before installing, so the installer writes its config into the
+# folder the volume starts from, and a fresh container has a valid, empty config.
 ARG CLAUDE_CODE_VERSION
 USER vscode
+ENV CLAUDE_CONFIG_DIR=/home/vscode/.claude
 RUN mkdir -p /home/vscode/.claude \
   && curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}"
 ENV PATH="/home/vscode/.local/bin:${PATH}" \

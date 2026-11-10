@@ -6,7 +6,8 @@
   "service": "app",
   "runServices": ["app", "postgres"],
   "workspaceFolder": "/workspace",
-  "shutdownAction": "stopCompose",
+  // Closing VS Code must not stop a running agent. Stop it with the command in README.md.
+  "shutdownAction": "none",
   "remoteUser": "vscode",
   "features": {
     // No Corepack in Node 25+, so the feature installs pnpm itself.
@@ -21,7 +22,8 @@
       "version": "1.65.0"
     }
   },
-  // Tokens come from the host's environment at runtime. Nothing is baked into the image.
+  // Tokens come from the environment of the terminal that runs `devcontainer up` or
+  // `devcontainer exec`. Nothing is baked into the image or saved on disk.
   "remoteEnv": {
     "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
     "GH_TOKEN": "${localEnv:GH_TOKEN}"
