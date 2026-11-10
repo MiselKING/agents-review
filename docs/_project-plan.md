@@ -190,20 +190,20 @@ Eight phases, done in order. There's no fixed timeline: each phase takes as long
 
 **Phase 1: Foundations**
 
-- [ ] **You:** create the public repo `agents-review` and push the first commit to `main`. Then add three rulesets in GitHub **Settings → Rules → Rulesets** (why: see Guardrails): (1) on `main`: require a PR (0 approvals), block force pushes, restrict deletions, no bypass; (2) on `main`: require 1 approval, with Repository admin (you) as the only bypass in "For pull requests only" mode; (3) on all branches except `renovate/**/*`: block force pushes. On the first PR, confirm the bypass skips only the approval rule.
-- [ ] **You:** add README.md (what, why, structure) and AGENTS.md, from the drafts kept with this plan.
-- [ ] **You:** add CLAUDE.md (one line: `@AGENTS.md`) and a `.claude/settings.json` that denies reading `.env` and `git push --force`. Guardrails go in before the first agent run.
-- [ ] **Agent drafts, you edit:** issue forms (feature, bug, visual change) and the `write-issue` skill.
-- [ ] **You:** write the scaffold issue with `write-issue`. Done means every AGENTS.md command passes on a fresh clone. One-time setup rules go in this issue, not in AGENTS.md: ports from env with defaults in `.env.example`, Vite `strictPort` and a `/graphql` proxy, Yoga with one hello query, codegen wired, Oxlint and Oxfmt, a Vitest config per package, one Playwright smoke test, Postgres in Compose, `db:*` scripts present but no tables yet, Node and pnpm versions pinned.
-- [ ] **Agent:** build the scaffold locally in plan mode. **You:** approve the plan before it writes code.
-- [ ] **You:** run every AGENTS.md command by hand. Where reality and AGENTS.md differ, fix one of them and log it.
-- [ ] **Agent:** CI workflow (lint, typecheck, tests, codegen check). **You:** make CI a required status check in ruleset (1), the one with no bypass.
+- ✅ **You:** create the public repo `agents-review` and push the first commit to `main`. Then add three rulesets in GitHub **Settings → Rules → Rulesets** (why: see Guardrails): (1) on `main`: require a PR (0 approvals), block force pushes, restrict deletions, no bypass; (2) on `main`: require 1 approval, with Repository admin (you) as the only bypass in "For pull requests only" mode; (3) on all branches except `renovate/**/*`: block force pushes. On the first PR, confirm the bypass skips only the approval rule.
+- ✅ **You:** add README.md (what, why, structure) and AGENTS.md, from the drafts kept with this plan.
+- ✅ **You:** add CLAUDE.md (one line: `@AGENTS.md`) and a `.claude/settings.json` that denies reading `.env` and `git push --force`. Guardrails go in before the first agent run.
+- ✅ **Agent drafts, you edit:** issue forms (feature, bug, visual change) and the `write-issue` skill.
+- ✅ **You:** write the scaffold issue with `write-issue`. Done means every AGENTS.md command passes on a fresh clone. One-time setup rules go in this issue, not in AGENTS.md: ports from env with defaults in `.env.example`, Vite `strictPort` and a `/graphql` proxy, Yoga with one hello query, codegen wired, Oxlint and Oxfmt, a Vitest config per package, one Playwright smoke test, Postgres in Compose, `db:*` scripts present but no tables yet, Node and pnpm versions pinned.
+- ✅ **Agent:** build the scaffold locally in plan mode. **You:** approve the plan before it writes code.
+- ✅ **You:** run every AGENTS.md command by hand. Where reality and AGENTS.md differ, fix one of them and log it.
+- ✅ **Agent:** CI workflow (lint, typecheck, tests, codegen check). **You:** make CI a required status check in ruleset (1), the one with no bypass.
 - [ ] **You:** draft the 12 eval tasks (see Measurement). Keep them, and later their hidden tests, in the private evals repo `agents-review-evals`.
 
 **Phase 2: Environment and guardrails**
 
-- [ ] **Agent drafts, you review:** dev container from Anthropic's reference, with the firewall allowlist adjusted for this repo.
-- [ ] **You:** open the same config in Codespaces once. If the firewall won't start there, keep unattended runs local.
+- ✅ **Agent drafts, you review:** dev container from Anthropic's reference, with the firewall allowlist adjusted for this repo.
+- ✅ **You:** open the same config in Codespaces once. If the firewall won't start there, keep unattended runs local.
 - [ ] **Agent drafts, you review:** permissions in `.claude/settings.json` (allow test and lint commands) and hooks: lint and typecheck after edits, a Stop hook while checks fail, the protected-files hook.
 - [ ] **You:** run one headless task in the container (`claude -p ... --max-turns`) and confirm it can run the full test suite.
 
