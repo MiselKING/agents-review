@@ -68,13 +68,19 @@ while read -r cidr; do
     ipset add allowed-domains "$cidr"
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
-# Resolve and add other allowed domains: npm, Anthropic, VS Code Marketplace
+# Resolve and add other allowed domains: npm, Anthropic, VS Code Marketplace.
+# Extensions download from a host per publisher (<publisher>.gallerycdn.vsassets.io, with
+# <publisher>.gallery.vsassets.io as fallback). Locally VS Code falls back to downloading on
+# your computer, but Codespaces can't, so add both hosts for each extension publisher in
+# devcontainer.json.
 for domain in \
     "registry.npmjs.org" \
     "api.anthropic.com" \
     "marketplace.visualstudio.com" \
     "vscode.blob.core.windows.net" \
-    "update.code.visualstudio.com"; do
+    "update.code.visualstudio.com" \
+    "oxc.gallerycdn.vsassets.io" \
+    "oxc.gallery.vsassets.io"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then

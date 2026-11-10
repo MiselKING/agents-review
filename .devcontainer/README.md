@@ -81,18 +81,34 @@ For looking around and editing, not for agent runs: VS Code terminals don't get 
 On macOS and Linux, VS Code also forwards your SSH agent if one is running, so close VS Code before agent runs.
 
 To open the container (start it with the CLI first):
-- Windows: Ctrl+Shift+P → **WSL: Connect to WSL**. In the new window: File → Open Folder → `/home/<your Ubuntu user>/agents-review`. Then Ctrl+Shift+P → **Dev Containers: Reopen in Container**.
+- Windows: Ctrl+Shift+P → **WSL: Connect to WSL**. In the new window: File → Open Folder → `/home/<your Ubuntu user>/agents-review`. Check that the bottom-left corner says **"WSL: Ubuntu"**, then Ctrl+Shift+P → **Dev Containers: Reopen in Container**.
+  Don't open the folder through its Windows path (`\\wsl.localhost\...`), for example from the recent folders list: VS Code then makes a container the CLI can't find (`Dev container not found`).
 - macOS/Linux: File → Open Folder → your clone. Then Cmd/Ctrl+Shift+P → **Dev Containers: Reopen in Container**.
 
 The bottom-left corner shows "Dev Container: agents-review" when you're in. Closing the window leaves the container running.
 
-## Codespaces (not tested yet)
+## Codespaces (optional)
 
-Add `CLAUDE_CODE_OAUTH_TOKEN` under github.com → Settings → Codespaces → Secrets, with access to this repo. Then on the repo page: Code → Codespaces → ⋯ → New with options → pick the branch → Create codespace. In "View creation log", look for `Firewall configuration complete`, then run the checks above. Delete the codespace afterwards (github.com → Your codespaces) so it doesn't use your free hours.
+The same container, but on GitHub's machines instead of yours, opened in the browser. Use it when you don't want to install Docker and the CLI, you're on another computer, or you want to keep your own machine free while an agent works. A personal account gets 120 core-hours a month for free: 60 hours on the default 2-core machine.
+
+**Once:** github.com → your profile picture → Settings → Codespaces → Secrets → **New secret**: name `CLAUDE_CODE_OAUTH_TOKEN`, your Claude token as the value, repository access `agents-review`. You don't need a GitHub token: Codespaces gives each codespace its own token for this repo.
+
+**Start:** on the repo page, pick the branch in the branch dropdown, then **Code** → **Codespaces** → **Create codespace on** _branch name_. It opens VS Code in the browser and builds (about 5 minutes the first time). For a bigger machine, use **⋯** → **New with options** instead.
+
+**Check the build:** Ctrl+Shift+P → **Codespaces: View Creation Log**, and look for `Firewall configuration complete`.
+
+**Use it:** Terminal → New Terminal. You're already inside the container, so run `claude -p "..."` and the checks above directly, without `devcontainer exec`.
+
+**Stop or delete:** at https://github.com/codespaces, click **⋯** next to the codespace → **Stop codespace** or **Delete**. It also stops by itself after 30 minutes without activity. Delete it when you're done, so it stops using your storage quota.
 
 ## If something fails
 
 - **A token length is 0:** that terminal doesn't have the tokens, or you opened the shell another way (VS Code, `docker exec`). Paste them again (root README, Start step 2) and use `devcontainer exec`.
+- **`devcontainer exec` says "Dev container not found"** while the container runs: VS Code created it from a Windows path. Recreate it from the Ubuntu terminal (your database and Claude config are kept):
+  ```bash
+  docker compose -p agents-review_devcontainer down
+  devcontainer up --workspace-folder ~/agents-review
+  ```
 - **`git commit` says "Please tell me who you are":** run the `git config user.name …` line above inside the container.
 - **A website or extension is blocked:** the allowed hosts are in `.devcontainer/init-firewall.sh`.
 - **Start fails or something is broken:** remove everything (root README) and start again.

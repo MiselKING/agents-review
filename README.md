@@ -39,7 +39,12 @@ Install these first:
 Then run the first-time setup command from [AGENTS.md](AGENTS.md#commands). On Windows, run it in Git Bash or PowerShell 7, because it uses `cp` and `&&`.
 
 ## Dev container (optional)
-For running Claude headless and unattended (`claude -p`), for example the eval trials and Phase 2's headless task, in a container whose firewall only lets it reach GitHub, npm, Anthropic and the VS Code Marketplace. Normal development above doesn't use it and isn't changed by it. PRs from issues are built by GitHub Actions, not here.
+Use it when Claude should work on its own, without you approving each step, for example a long task or a batch of test runs. Claude then works in a sealed-off container:
+- it sees only a separate copy of the repo, not your working copy or other files;
+- it can only reach GitHub, npm, Anthropic and the VS Code Marketplace;
+- it has only the tokens you paste in, not your own logins.
+
+For everyday development you don't need it, and the normal setup above stays as it is.
 
 Works on Windows (WSL 2) + Docker Desktop, macOS (Intel and Apple Silicon) + Docker Desktop, and Linux + Docker Engine. Podman and rootless Docker are untested.
 
