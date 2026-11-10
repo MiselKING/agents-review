@@ -55,6 +55,7 @@ All commands below run in **a terminal on your computer**: on Windows, the **Ubu
 2. Paste your tokens. They stay in this terminal only and are never saved, so paste them again in each new terminal. Skip the GitHub one if runs don't need to push.
    ```bash
    read -rsp "Claude token: " CLAUDE_CODE_OAUTH_TOKEN && export CLAUDE_CODE_OAUTH_TOKEN
+   
    read -rsp "GitHub token: " GH_TOKEN && export GH_TOKEN
    ```
 3. Start the container:

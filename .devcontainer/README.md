@@ -19,6 +19,7 @@ Every command here runs in **a terminal on your computer**: on Windows, the **Ub
      Close and reopen the Ubuntu terminal, then:
      ```bash
      nvm install 26
+     
      curl -fsSL https://get.pnpm.io/install.sh | env PNPM_VERSION=12.18.0 sh -
      ```
      Close and reopen it again, then:
