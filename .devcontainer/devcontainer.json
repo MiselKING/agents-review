@@ -1,0 +1,44 @@
+// Optional dev container for unattended agent runs. See "Dev container" in README.md.
+// Nothing outside .devcontainer/ depends on it: the normal local setup works without it.
+{
+  "name": "agents-review",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "runServices": ["app", "postgres"],
+  "workspaceFolder": "/workspace",
+  // Closing VS Code must not stop a running agent. Stop it with the command in README.md.
+  "shutdownAction": "none",
+  "remoteUser": "vscode",
+  "features": {
+    // No Corepack in Node 25+, so the feature installs pnpm itself.
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "26",
+      "pnpmVersion": "12.18.0"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    // Chromium for Playwright, downloaded at image build so the firewall can stay closed.
+    // Must match @playwright/test in pnpm-lock.yaml; after an upgrade, change it and rebuild.
+    "./features/playwright": {
+      "version": "1.65.0"
+    }
+  },
+  // Tokens come from the environment of the terminal that runs `devcontainer up` or
+  // `devcontainer exec`. Nothing is baked into the image or saved on disk.
+  "remoteEnv": {
+    "CLAUDE_CODE_OAUTH_TOKEN": "${localEnv:CLAUDE_CODE_OAUTH_TOKEN}",
+    "GH_TOKEN": "${localEnv:GH_TOKEN}"
+  },
+  // The firewall goes up before anything is installed, and again on every restart.
+  "postCreateCommand": "sudo /usr/local/bin/init-firewall.sh && bash .devcontainer/post-create.sh",
+  "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
+  "waitFor": "postStartCommand",
+  "customizations": {
+    "vscode": {
+      // The Node feature adds ESLint; this repo lints and formats with oxc instead.
+      "extensions": ["oxc.oxc-vscode", "-dbaeumer.vscode-eslint"],
+      "settings": {
+        "editor.defaultFormatter": "oxc.oxc-vscode"
+      }
+    }
+  }
+}

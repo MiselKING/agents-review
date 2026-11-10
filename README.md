@@ -38,6 +38,60 @@ Install these first:
 
 Then run the first-time setup command from [AGENTS.md](AGENTS.md#commands). On Windows, run it in Git Bash or PowerShell 7, because it uses `cp` and `&&`.
 
+## Dev container (optional)
+Use it when Claude should work on its own, without you approving each step, for example a long task or a batch of test runs. Claude then works in a sealed-off container:
+- it sees only a separate copy of the repo, not your working copy or other files;
+- it can only reach GitHub, npm, Anthropic and the VS Code Marketplace;
+- it has only the tokens you paste in, not your own logins.
+
+For everyday development you don't need it, and the normal setup above stays as it is.
+
+Works on Windows (WSL 2) + Docker Desktop, macOS (Intel and Apple Silicon) + Docker Desktop, and Linux + Docker Engine. Podman and rootless Docker are untested.
+
+**First time on a machine?** Do the one-time setup in [.devcontainer/README.md](.devcontainer/README.md): Docker, the devcontainer CLI, and your tokens.
+
+All commands below run in **a terminal on your computer**: on Windows, the **Ubuntu (WSL)** terminal, not PowerShell; on macOS and Linux, your usual terminal.
+
+**Start**
+1. Once: clone a separate copy. Never use your everyday checkout: its `node_modules` has binaries for your computer, and the agent must not touch your working copy.
+   ```bash
+   git clone https://github.com/MiselKING/agents-review.git ~/agents-review
+   ```
+2. Paste your tokens. They stay in this terminal only and are never saved, so paste them again in each new terminal. Skip the GitHub one if runs don't need to push.
+   ```bash
+   read -rsp "Claude token: " CLAUDE_CODE_OAUTH_TOKEN && export CLAUDE_CODE_OAUTH_TOKEN
+   
+   read -rsp "GitHub token: " GH_TOKEN && export GH_TOKEN
+   ```
+3. Start the container:
+   ```bash
+   devcontainer up --workspace-folder ~/agents-review
+   ```
+   The first start builds the image and sets up the project (about 5 minutes). Later starts take seconds.
+
+**Run Claude** (same terminal, so it gets the tokens):
+```bash
+devcontainer exec --workspace-folder ~/agents-review claude -p "Summarize what apps/api does" --max-turns 10
+```
+Until Claude's permissions are set up (separate issue), `-p` runs can read files but are refused commands like `pnpm test`.
+For a shell inside the container: `devcontainer exec --workspace-folder ~/agents-review bash` (`exit` to leave). Only `devcontainer exec` from a terminal with the tokens passes them in; VS Code terminals don't get them.
+
+**Stop:** `docker compose -p agents-review_devcontainer stop`. To start again, do steps 2 and 3.
+
+**Remove everything:** the containers, the database, the Claude config, the image, then the clone:
+```bash
+docker compose -p agents-review_devcontainer down -v --rmi local
+rm -rf ~/agents-review
+```
+`agents-review_devcontainer` is the clone's folder name plus `_devcontainer`. Change it if your clone has another name.
+
+**Upgrades:** Chromium and Claude Code are built into the image. After a Playwright upgrade, set the playwright feature's `version` in `.devcontainer/devcontainer.json`; for Claude Code, set `CLAUDE_CODE_VERSION` in `.devcontainer/compose.yaml`. Then rebuild: `devcontainer up --workspace-folder ~/agents-review --remove-existing-container`.
+
+**Risks**
+- Anything inside can leave through the allowed hosts, e.g. by pushing to GitHub.
+- The firewall looks up the allowed hosts' IPs only at startup. If one changes its IPs, restart the container.
+- VS Code, while connected, passes your own Git login into the container. See [.devcontainer/README.md](.devcontainer/README.md#vs-code-optional) before using it.
+
 ## The agent setup
 Flow: issue → agent builds on a branch → draft PR → CI → AI review → my review → merge. Agents never merge. Failed CI or requested changes go back to the agent.
 - Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (comparison, 30-day Pro trial)

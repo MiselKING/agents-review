@@ -1,0 +1,17 @@
+{
+  "id": "playwright",
+  "version": "1.0.0",
+  "name": "Playwright Chromium",
+  "description": "Installs Chromium and its system packages for Playwright at image build.",
+  "options": {
+    "version": {
+      "type": "string",
+      "default": "1.65.0",
+      "description": "Playwright version. Must match @playwright/test in pnpm-lock.yaml."
+    }
+  },
+  "containerEnv": {
+    "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright"
+  },
+  "installsAfter": ["ghcr.io/devcontainers/features/node"]
+}
