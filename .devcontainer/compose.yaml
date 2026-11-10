@@ -1,0 +1,47 @@
+# Used only by the dev container (devcontainer.json). The root docker-compose.yml is the
+# normal local setup and is not affected by this file.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Claude Code version from the stable channel. To upgrade, change it and rebuild.
+        CLAUDE_CODE_VERSION: 2.1.311
+    command: sleep infinity
+    # For the default-deny firewall (init-firewall.sh).
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      # The clone only, never its parent folder.
+      - ..:/workspace:cached
+      - claude-config:/home/vscode/.claude
+    environment:
+      # Real env vars win over .env, so this points the apps at the postgres service below.
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/agents_review
+      POSTGRES_PORT: '5432'
+      CLAUDE_CONFIG_DIR: /home/vscode/.claude
+      DISABLE_AUTOUPDATER: '1'
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Same as the root docker-compose.yml, but with no published port, so it never
+  # clashes with the normal local Postgres on the host.
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agents_review
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  claude-config:
+  postgres-data:

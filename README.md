@@ -38,6 +38,28 @@ Install these first:
 
 Then run the first-time setup command from [AGENTS.md](AGENTS.md#commands). On Windows, run it in Git Bash or PowerShell 7, because it uses `cp` and `&&`.
 
+## Dev container (optional)
+For unattended agent runs, with a default-deny firewall. The setup above doesn't need it and isn't changed by it.
+
+Supported hosts: Windows (WSL 2) + Docker Desktop, macOS (Intel and Apple Silicon) + Docker Desktop, Linux + Docker Engine. Podman and rootless Docker are untested.
+
+**Start**
+1. Make a separate clone, never your everyday checkout: its `node_modules` has host binaries, and the agent must not touch your working copy. Windows: clone inside WSL 2, e.g. `~/agents-review`. macOS/Linux: any separate folder.
+2. In the shell you start from, export `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and `GH_TOKEN` (a fine-grained token for this repo only). Nothing else from your machine goes in.
+3. Run `devcontainer up --workspace-folder ~/agents-review` (CLI: `pnpm add -g @devcontainers/cli`), or open the clone in VS Code (on Windows through the WSL extension) and run "Reopen in Container". The first start installs dependencies, migrates and seeds. Postgres runs inside, with no host port.
+
+Run an agent: `devcontainer exec --workspace-folder ~/agents-review claude -p "..."`
+
+**Stop and remove** (the Compose project is `<clone folder>_devcontainer`)
+- Stop: `docker compose -p agents-review_devcontainer stop`
+- Remove container, volumes and image: `docker compose -p agents-review_devcontainer down -v --rmi local`, then delete the clone.
+
+**Upgrades:** Chromium and Claude Code are baked into the image. After a Playwright upgrade, set the playwright feature's `version` in `.devcontainer/devcontainer.json`; for Claude Code, `CLAUDE_CODE_VERSION` in `.devcontainer/compose.yaml`. Then rebuild: `devcontainer up --workspace-folder ~/agents-review --remove-existing-container`, or "Rebuild Container" in VS Code.
+
+**Risks**
+- Anything inside can leave through the allowed hosts (GitHub, npm, Anthropic, VS Code Marketplace), e.g. by pushing to GitHub.
+- The firewall resolves IPs only at startup. If an allowed host changes IPs, restart the container.
+
 ## The agent setup
 Flow: issue → agent builds on a branch → draft PR → CI → AI review → my review → merge. Agents never merge. Failed CI or requested changes go back to the agent.
 - Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (comparison, 30-day Pro trial)
