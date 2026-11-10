@@ -72,7 +72,8 @@ done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 # Extensions download from a host per publisher (<publisher>.gallerycdn.vsassets.io, with
 # <publisher>.gallery.vsassets.io as fallback). Locally VS Code falls back to downloading on
 # your computer, but Codespaces can't, so add both hosts for each extension publisher in
-# devcontainer.json.
+# devcontainer.json. GitHub's are for the Codespaces extension, which Codespaces installs
+# itself (its "Codespaces:" commands, such as View Creation Log and Rebuild Container).
 for domain in \
     "registry.npmjs.org" \
     "api.anthropic.com" \
@@ -80,7 +81,9 @@ for domain in \
     "vscode.blob.core.windows.net" \
     "update.code.visualstudio.com" \
     "oxc.gallerycdn.vsassets.io" \
-    "oxc.gallery.vsassets.io"; do
+    "oxc.gallery.vsassets.io" \
+    "github.gallerycdn.vsassets.io" \
+    "github.gallery.vsassets.io"; do
     echo "Resolving $domain..."
     ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then
