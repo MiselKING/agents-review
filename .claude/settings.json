@@ -3,7 +3,6 @@
         "ask": [
             "Read(./docs/_project-plan.md)",
             "Read(./docs/AGENTS.md.example)",
-            "Read(./docs/private/**)",
             "Edit(**/AGENTS.md)",
             "Edit(**/CLAUDE.md)",
             "Edit(./REVIEW.md)",
@@ -30,6 +29,8 @@
             "Read(**/.env.production)",
             "Read(**/.env.staging)",
             "Read(**/.env.test)",
+            "Read(./docs/private/**)",
+            "Edit(./docs/private/**)",
             "Edit(./apps/api/src/generated/**)",
             "Edit(./apps/web/src/gql/**)",
             "Edit(./packages/db/drizzle/**)",

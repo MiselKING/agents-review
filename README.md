@@ -13,14 +13,14 @@ A small audience sync tool:
 - A run history page shows each sync with status, counts and errors.
 
 ## Architecture
-One monorepo (pnpm workspaces + Turborepo) with 7 packages:
+One monorepo (pnpm workspaces + Turborepo) with 6 packages today and a 7th planned:
 - `apps/web`: React app (audience builder, member table, run history)
 - `apps/api`: GraphQL API (schema-first)
 - `services/sync-worker`: sends audiences to the ad platform in batches
 - `services/mock-destination`: fake ad platform with rate limits and random failures
 - `packages/shared`: GraphQL schema and shared types
 - `packages/db`: database schema, migrations and seed
-- `tools/mcp-dev`: custom MCP server that gives agents CI logs and sync-run data
+- `tools/mcp-dev` (planned, Phase 6): custom MCP server that gives agents CI logs and sync-run data
 
 Postgres runs in Docker Compose with about 100k seeded rows. Nothing is hosted. Everything runs locally, in the dev container and in CI.
 
@@ -115,7 +115,7 @@ Installed versions are pinned in `package.json` files and `pnpm-lock.yaml`; this
 | Package | Version | What it does | Why this one |
 |---|---|---|---|
 | Node.js | 26 (LTS) | Runtime for the API, services and tooling | Runs TypeScript directly (type stripping) and loads `.env` itself, so no tsx or dotenv |
-| pnpm | 12 | Installs dependencies; workspaces link the 7 packages together | Strict (no undeclared deps), fast, built-in monorepo support. |
+| pnpm | 12 | Installs dependencies; workspaces link the packages together | Strict (no undeclared deps), fast, built-in monorepo support. |
 | Turborepo | 2.x | Runs scripts (test, lint, build) across all packages | Runs in dependency order and in parallel, and skips packages that didn't change |
 | TypeScript | 7 | Language and type checker | New native compiler, about 10x faster type checks |
 | React + Vite | Vite 8 | UI library + dev server and bundler | Standard choice; Vite 8 builds with Rolldown (Rust), much faster builds |
