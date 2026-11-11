@@ -53,6 +53,7 @@ claude --version                                                 # the pinned ve
 claude -p "hi"                                                   # Claude answers
 gh auth status                                                   # logged in (only with a GitHub token)
 curl -s -m 5 https://example.com || echo blocked                 # prints: blocked
+sudo -n true 2>/dev/null || echo "no sudo"                       # prints: no sudo
 ```
 
 Optional, with a GitHub token: push an empty test branch and delete it again.

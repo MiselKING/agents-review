@@ -67,7 +67,8 @@
         "import",
         "promise",
         "react",
-        "jsx-a11y"
+        "jsx-a11y",
+        "vitest"
       ],
       "rules": {
         "react/no-danger": "error",
