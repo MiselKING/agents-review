@@ -230,8 +230,8 @@ Eight phases, in order, with no fixed timeline. If time runs short, cut the cust
 - ✅ **Agent drafts, you review:** dev container with the firewall allowlist adjusted for this repo.
 - ✅ **You:** open the same config in Codespaces once.
 - ✅ **Agent drafts, you review:** permissions (allow the project checks, deny agent config in the dev container) and the two hooks.
-- [ ] **You:** run one headless task in the container (`claude -p ... --max-turns ... --dangerously-skip-permissions`). Confirm it can run the full test suite and that an edit to AGENTS.md is denied.
-- [ ] **You:** draft the 12 eval tasks in the private repo `agents-review-evals`, before Phase 3 shows what the setup is good at.
+- ✅ **You:** run one headless task in the container (`claude -p ... --max-turns ... --dangerously-skip-permissions`). Confirm it can run the full test suite and that an edit to AGENTS.md is denied.
+- ✅ **You:** draft the 12 eval tasks in the private repo `agents-review-evals`, before Phase 3 shows what the setup is good at.
 
 **Phase 3: Product features through issues**
 
