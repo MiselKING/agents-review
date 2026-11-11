@@ -32,51 +32,10 @@ function parseObject(json: string): Record<string, unknown> {
 }
 
 const editOf = (filePath: string) => ({
-  hook_event_name: 'PreToolUse',
+  hook_event_name: 'PostToolUse',
   tool_name: 'Edit',
   cwd: root,
   tool_input: { file_path: filePath },
-});
-
-describe('protect-files', () => {
-  const protectedPaths = [
-    'AGENTS.md',
-    'apps/web/CLAUDE.md',
-    'REVIEW.md',
-    '.claude/settings.json',
-    'agents.md',
-    // Absolute, in this OS's own format (backslashes on Windows).
-    path.join(root, 'apps', 'web', 'AGENTS.md'),
-    // Absolute with forward slashes, as some tools send on Windows too.
-    `${root.split(path.sep).join('/')}/.claude/hooks/lib.ts`,
-  ];
-
-  for (const filePath of protectedPaths) {
-    it(`asks before an edit to ${filePath}`, () => {
-      const { status, stdout } = runHook('protect-files.ts', editOf(filePath));
-      assert.equal(status, 0);
-      const output = parseObject(stdout).hookSpecificOutput;
-      assert.ok(isRecord(output));
-      assert.equal(output.hookEventName, 'PreToolUse');
-      assert.equal(output.permissionDecision, 'ask');
-      assert.match(String(output.permissionDecisionReason), /agent config/);
-    });
-  }
-
-  const otherInputs: Record<string, unknown> = {
-    'a source file': editOf('apps/api/src/yoga.ts'),
-    'a REVIEW.md below the root': editOf('docs/REVIEW.md'),
-    'a file outside the project': editOf(path.resolve(root, '..', 'AGENTS.md')),
-    'input with no file path': { hook_event_name: 'PreToolUse', tool_input: {} },
-    'empty input': '',
-    'input that is not JSON': 'not json',
-  };
-
-  for (const [name, input] of Object.entries(otherInputs)) {
-    it(`stays silent for ${name}`, () => {
-      assert.deepEqual(runHook('protect-files.ts', input), SILENT);
-    });
-  }
 });
 
 describe('lint-edited-file', () => {

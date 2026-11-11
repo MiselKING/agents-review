@@ -76,6 +76,10 @@ jobs:
   e2e:
     runs-on: ubuntu-26.04
     timeout-minutes: 20
+    # Chromium and its system packages come with the image. Keep the tag equal to @playwright/test.
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-resolute@sha256:4d70b558dbaff71611b2f3e7a32aa2b4d42cfc892078ad368cb7ea229c2ffd1f
+      options: --user 1001
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 2
@@ -88,9 +92,6 @@ jobs:
           save-cache: false
           require-lockfile: true
       - run: cp .env.example .env
-      - name: Install Chromium with its Linux system packages
-        timeout-minutes: 5
-        run: pnpm --filter ./apps/web exec playwright install --with-deps chromium
       - name: E2E tests
         timeout-minutes: 10
         run: pnpm test:e2e

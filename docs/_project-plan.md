@@ -95,12 +95,11 @@ agents-review/
 **How the pieces work:**
 
 - **AGENTS.md** is the one rule file for every tool: commands, package boundaries, conventions, "never do" rules, definition of done. Keep it short. Claude Code reads AGENTS.md only when no CLAUDE.md exists, so the root CLAUDE.md imports it, and every nested AGENTS.md needs a one-line CLAUDE.md beside it. Copilot reads AGENTS.md natively, nested ones too. Add nested files and `.claude/rules/` only when a mistake repeats.
-- **Permissions** mirror AGENTS.md: deny what it says never to do, ask before what it says to ask about, allow the project checks. In a `claude -p` run nobody can answer a prompt, so every `ask` rule acts as a deny, even with `--dangerously-skip-permissions`.
-- **Hooks** enforce, because instructions are only context. They are TypeScript files run directly by Node, so they work on Windows, in the dev container and in CI. Today there are three:
+- **Permissions** mirror AGENTS.md: deny what it says never to do, ask before what it says to ask about, allow the project checks. Agent config (AGENTS.md, CLAUDE.md, REVIEW.md, `.claude/`) is `ask` on your machine, so you can approve an edit. In the dev container, where nobody watches, a managed settings file baked into the image denies it. Only `deny` rules also cover shell writes such as `>>` redirects; `ask` rules cover only the file tools.
+- **Hooks** enforce, because instructions are only context. They are TypeScript files run directly by Node, so they work on Windows, in the dev container and in CI. Today there are two:
   - After each edit, Oxlint runs on the edited file.
   - Before Claude finishes, lint and typecheck must pass. The hook blocks once, then lets Claude stop with a warning, so it can't loop. `--max-turns` is the real limit in headless runs.
-  - Edits to AGENTS.md, CLAUDE.md, REVIEW.md and `.claude/` prompt in a session and are denied in headless runs. This overlaps the `ask` rules on purpose.
-- **Failing test first** (Phase 5): the `fix-bug` skill writes a test that reproduces the bug, confirms it fails, then creates a gitignored lock file in the repo root. While the lock exists, a hook blocks edits to test files, so the agent fixes the code instead of weakening the test. The hook covers only the Edit and Write tools, so CI backs it up: on PRs labelled `bug`, the new tests must fail on `main` and pass on the branch.
+- **Failing test first** (Phase 5): the `fix-bug` skill writes a test that reproduces the bug, confirms it fails, then creates a gitignored lock file in the repo root. While the lock exists, a PreToolUse hook blocks edits to test files, so the agent fixes the code instead of weakening the test. That needs a hook, because a static rule can't depend on the lock. The hook covers only the Edit and Write tools, so CI backs it up: on PRs labelled `bug`, the new tests must fail on `main` and pass on the branch.
 - **REVIEW.md** is the review policy: three passes (bugs, security, match with acceptance criteria), what counts as Important versus a nit, at most 5 nits, and what to skip. Copilot code review reads it automatically. CodeRabbit and the Claude Code Action don't: list it in `.coderabbit.yaml` under `knowledge_base.code_guidelines.filePatterns`, and name it in the Claude review prompt.
 - **Skills** are repeatable workflows the agent pulls in when relevant. `write-issue` runs only when you call it.
 - **Reviewer subagent** checks a diff against AGENTS.md before you look at it.
@@ -185,7 +184,7 @@ Repo-wide PR settings (**Settings → General → Pull Requests**):
 - **A PR can't rewrite its own review rules.** See "Review rules" under Setup traps. Copilot reads its instructions from the PR's own branch, so check every PR that touches AGENTS.md or REVIEW.md yourself.
 - **Scoped credentials.** A fine-grained GitHub token limited to this repo, read-only where possible. Secrets live only in GitHub Actions secrets, never in the container image. Treat the Claude OAuth token like a password.
 - **Public logs.** Actions logs on a public repo are public. Leave the action's `show_full_output` off.
-- **Isolation.** Skip permission prompts only inside the dev container, as a non-root user. In CI, use an exact tool allowlist.
+- **Isolation.** Skip permission prompts only inside the dev container, as a non-root user. In CI, use an exact tool allowlist, and pass the same deny rules for agent config with `--disallowedTools`.
 - **Cost and loop limits.** `--max-turns` on every headless run, at most one automatic CI-fix attempt and two automatic reviews per PR.
 
 ## Tools and cost
@@ -230,13 +229,13 @@ Eight phases, in order, with no fixed timeline. If time runs short, cut the cust
 
 - ✅ **Agent drafts, you review:** dev container with the firewall allowlist adjusted for this repo.
 - ✅ **You:** open the same config in Codespaces once.
-- ✅ **Agent drafts, you review:** permissions (allow the project checks) and the three hooks.
+- ✅ **Agent drafts, you review:** permissions (allow the project checks, deny agent config in the dev container) and the two hooks.
 - [ ] **You:** run one headless task in the container (`claude -p ... --max-turns ... --dangerously-skip-permissions`). Confirm it can run the full test suite and that an edit to AGENTS.md is denied.
 - [ ] **You:** draft the 12 eval tasks in the private repo `agents-review-evals`, before Phase 3 shows what the setup is good at.
 
 **Phase 3: Product features through issues**
 
-- [ ] **You:** write 6 issues with `write-issue`: data model with seed data, GraphQL API, audience builder UI, member table, sync worker with the mock destination, run history page. The data-model issue also starts Postgres in the CI `e2e` job, which has none today.
+- [ ] **You:** write 6 issues with `write-issue`: data model with seed data, GraphQL API, audience builder UI, member table, sync worker with the mock destination, run history page. The data-model issue also adds Postgres to the CI `e2e` job, as a service container, since that job runs inside Playwright's image.
 - [ ] **Agent:** build each in plan mode. Run two in parallel git worktrees, each with its own `.env` ports and database name.
 - [ ] **You:** review and merge. Add `apps/web/AGENTS.md` and `.claude/rules/` only when a mistake repeats.
 - [ ] **Agent drafts, you review:** the `write-tests` and `add-graphql-field` skills and the reviewer subagent, once there's a pattern to copy.

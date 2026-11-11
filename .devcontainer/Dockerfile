@@ -15,6 +15,9 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh \
   && echo "vscode ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/vscode-firewall \
   && chmod 0440 /etc/sudoers.d/vscode-firewall
 
+# Agents in the container can't edit agent config, even when skipping permission prompts.
+COPY managed-settings.json /etc/claude-code/managed-settings.json
+
 # git uses gh for github.com, and gh uses GH_TOKEN when it's set. No token is stored here,
 # so a token passed in later (devcontainer exec) works for git push without extra setup.
 RUN git config --system credential.https://github.com.helper '!gh auth git-credential'
