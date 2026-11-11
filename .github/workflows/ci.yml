@@ -21,29 +21,36 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 2
         with:
           persist-credentials: false
       # Installs pnpm from package.json `packageManager`, Node from .nvmrc, then runs `pnpm install`.
       - id: install
         uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        timeout-minutes: 5
         with:
           cache: true
           require-lockfile: true
       # Each check runs even if an earlier one failed, so one run shows every failure.
       - name: Lint
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 3
         run: pnpm lint
       - name: Typecheck
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 3
         run: pnpm typecheck
       - name: Unit tests
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 5
         run: pnpm test
       - name: Generated code is up to date
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 3
         run: pnpm codegen:check
       - name: Format
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        timeout-minutes: 3
         run: pnpm format:check
 
   setup:
@@ -51,9 +58,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 2
         with:
           persist-credentials: false
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        timeout-minutes: 5
         with:
           cache: true
           # Only the checks job saves the cache; parallel saves of the same key collide.
@@ -61,6 +70,7 @@ jobs:
           install: false
       # The AGENTS.md first-time setup command, exactly as written: a fresh clone must work.
       - name: First-time setup
+        timeout-minutes: 5
         run: cp .env.example .env && pnpm install && docker compose up -d && pnpm db:migrate && pnpm db:seed
 
   e2e:
@@ -68,20 +78,25 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 2
         with:
           persist-credentials: false
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        timeout-minutes: 5
         with:
           cache: true
           save-cache: false
           require-lockfile: true
       - run: cp .env.example .env
       - name: Install Chromium with its Linux system packages
+        timeout-minutes: 5
         run: pnpm --filter ./apps/web exec playwright install --with-deps chromium
       - name: E2E tests
+        timeout-minutes: 10
         run: pnpm test:e2e
       - name: Upload Playwright report
         if: ${{ failure() }}
+        timeout-minutes: 5
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
