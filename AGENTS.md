@@ -42,6 +42,7 @@ Before finishing any change, run and pass:
 - Sync writes are batched and idempotent: every batch sent to the destination carries an idempotency key, and a retry resends the same key.
 - GraphQL changes are additive. Removing or renaming a field needs approval (see Boundaries).
 - Dependencies: use the latest stable version that's compatible with the rest of the stack, never a deprecated package. Check the registry (`pnpm view <package> version`) instead of relying on memory.
+- Comments: only where the code can't explain itself, such as a non-obvious reason or a workaround. Keep them to one line; no file headers that restate what the file does.
 
 ## Boundaries
 

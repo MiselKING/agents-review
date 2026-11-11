@@ -1,7 +1,19 @@
 {
     "permissions": {
+        "allow": [
+            "Bash(pnpm lint)",
+            "Bash(pnpm typecheck)",
+            "Bash(pnpm test)",
+            "Bash(pnpm test:e2e)",
+            "Bash(pnpm test:hooks)",
+            "Bash(pnpm format)",
+            "Bash(pnpm format:check)",
+            "Bash(pnpm codegen)",
+            "Bash(pnpm codegen:check)",
+            "Bash(pnpm --filter * exec vitest run *)"
+        ],
         "ask": [
-            "Read(./docs/_project-plan.md)",
+            "Edit(./docs/_project-plan.md)",
             "Read(./docs/AGENTS.md.example)",
             "Edit(**/AGENTS.md)",
             "Edit(**/CLAUDE.md)",
@@ -47,6 +59,31 @@
             "Bash(npx *)",
             "Bash(yarn *)",
             "Bash(*drizzle-kit push*)"
+        ]
+    },
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lint-edited-file.ts\"",
+                        "timeout": 30
+                    }
+                ]
+            }
+        ],
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-before-stop.ts\"",
+                        "timeout": 120
+                    }
+                ]
+            }
         ]
     }
 }
