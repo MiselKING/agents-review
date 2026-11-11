@@ -204,7 +204,7 @@ Eight phases, done in order. There's no fixed timeline: each phase takes as long
 
 - ✅ **Agent drafts, you review:** dev container from Anthropic's reference, with the firewall allowlist adjusted for this repo.
 - ✅ **You:** open the same config in Codespaces once. If the firewall won't start there, keep unattended runs local.
-- [ ] **Agent drafts, you review:** permissions in `.claude/settings.json` (allow test and lint commands) and hooks: lint and typecheck after edits, a Stop hook while checks fail, the protected-files hook. Hook scripts in Node.
+- ✅ **Agent drafts, you review:** permissions in `.claude/settings.json` (allow test and lint commands) and hooks: lint and typecheck after edits, a Stop hook while checks fail, the protected-files hook. Hook scripts in Node.
 - [ ] **You:** run one headless task in the container (`claude -p ... --max-turns ... --dangerously-skip-permissions`) and confirm it can run the full test suite, and that an edit to AGENTS.md is denied.
 - [ ] **You:** draft the 12 eval tasks (see Measurement), before Phase 3 shows what the setup is good at. Keep them, and later their hidden tests, in the private evals repo `agents-review-evals`.
 

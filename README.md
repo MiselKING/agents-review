@@ -73,7 +73,7 @@ All commands below run in **a terminal on your computer**: on Windows, the **Ubu
 ```bash
 devcontainer exec --workspace-folder ~/agents-review claude -p "Summarize what apps/api does" --max-turns 10
 ```
-Until Claude's permissions are set up (separate issue), `-p` runs can read files but are refused commands like `pnpm test`.
+`-p` runs can run the project checks (`pnpm lint`, `pnpm test` and the others in AGENTS.md) without prompts. Anything that would need your approval is denied.
 For a shell inside the container: `devcontainer exec --workspace-folder ~/agents-review bash` (`exit` to leave). Only `devcontainer exec` from a terminal with the tokens passes them in; VS Code terminals don't get them.
 
 **Stop:** `docker compose -p agents-review_devcontainer stop`. To start again, do steps 2 and 3.
@@ -96,7 +96,7 @@ rm -rf ~/agents-review
 Flow: issue → agent builds on a branch → draft PR → CI → AI review → my review → merge. Agents never merge. Failed CI or requested changes go back to the agent.
 - Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (comparison, 30-day Pro trial)
 - Reviewers: Claude, CodeRabbit, Copilot code review (about 5 PRs)
-- Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills, hooks, `.mcp.json`, dev container with a default-deny firewall. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
+- Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills, hooks in `.claude/hooks/` (lint after each edit, lint and typecheck before Claude finishes, a prompt before agent config is edited), `.mcp.json`, dev container with a default-deny firewall. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
 - Writing issues: the issue forms on GitHub, or `/write-issue` in Claude Code with short notes (format in `.claude/skills/write-issue/SKILL.md`)
 - Side flows: Renovate dependency PRs, weekly docs sync, visual change requests
 - Measurement: 12 fixed tasks, run with a bare setup (Phase 4) and the full setup (Phase 7), 2 runs each
