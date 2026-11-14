@@ -15,16 +15,52 @@ import * as types from './graphql';
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-    "\n  query Hello {\n    hello\n  }\n": typeof types.HelloDocument,
+    "\n  query Audiences {\n    audiences {\n      id\n      name\n      memberCount\n      createdAt\n    }\n  }\n": typeof types.AudiencesDocument,
+    "\n  query Audience($id: ID!) {\n    audience(id: $id) {\n      id\n      name\n      definition {\n        version\n        match\n        conditions {\n          __typename\n          ... on AttributeCondition {\n            field\n            operator\n            value\n          }\n          ... on SignedUpCondition {\n            operator\n            window {\n              amount\n              unit\n            }\n          }\n          ... on EventCondition {\n            eventType\n            operator\n            window {\n              amount\n              unit\n            }\n          }\n        }\n      }\n    }\n  }\n": typeof types.AudienceDocument,
+    "\n  query Countries {\n    countries {\n      code\n      name\n    }\n  }\n": typeof types.CountriesDocument,
+    "\n  query AudiencePreviewCount($definition: AudienceFilterInput!) {\n    previewAudience(definition: $definition, first: 1) {\n      memberCount\n    }\n  }\n": typeof types.AudiencePreviewCountDocument,
+    "\n  mutation CreateAudience($input: CreateAudienceInput!) {\n    createAudience(input: $input) {\n      id\n    }\n  }\n": typeof types.CreateAudienceDocument,
+    "\n  mutation UpdateAudience($id: ID!, $input: UpdateAudienceInput!) {\n    updateAudience(id: $id, input: $input) {\n      id\n    }\n  }\n": typeof types.UpdateAudienceDocument,
+    "\n  mutation ArchiveAudience($id: ID!) {\n    archiveAudience(id: $id) {\n      id\n    }\n  }\n": typeof types.ArchiveAudienceDocument,
 };
 const documents: Documents = {
-    "\n  query Hello {\n    hello\n  }\n": types.HelloDocument,
+    "\n  query Audiences {\n    audiences {\n      id\n      name\n      memberCount\n      createdAt\n    }\n  }\n": types.AudiencesDocument,
+    "\n  query Audience($id: ID!) {\n    audience(id: $id) {\n      id\n      name\n      definition {\n        version\n        match\n        conditions {\n          __typename\n          ... on AttributeCondition {\n            field\n            operator\n            value\n          }\n          ... on SignedUpCondition {\n            operator\n            window {\n              amount\n              unit\n            }\n          }\n          ... on EventCondition {\n            eventType\n            operator\n            window {\n              amount\n              unit\n            }\n          }\n        }\n      }\n    }\n  }\n": types.AudienceDocument,
+    "\n  query Countries {\n    countries {\n      code\n      name\n    }\n  }\n": types.CountriesDocument,
+    "\n  query AudiencePreviewCount($definition: AudienceFilterInput!) {\n    previewAudience(definition: $definition, first: 1) {\n      memberCount\n    }\n  }\n": types.AudiencePreviewCountDocument,
+    "\n  mutation CreateAudience($input: CreateAudienceInput!) {\n    createAudience(input: $input) {\n      id\n    }\n  }\n": types.CreateAudienceDocument,
+    "\n  mutation UpdateAudience($id: ID!, $input: UpdateAudienceInput!) {\n    updateAudience(id: $id, input: $input) {\n      id\n    }\n  }\n": types.UpdateAudienceDocument,
+    "\n  mutation ArchiveAudience($id: ID!) {\n    archiveAudience(id: $id) {\n      id\n    }\n  }\n": types.ArchiveAudienceDocument,
 };
 
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query Hello {\n    hello\n  }\n"): typeof import('./graphql').HelloDocument;
+export function graphql(source: "\n  query Audiences {\n    audiences {\n      id\n      name\n      memberCount\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AudiencesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Audience($id: ID!) {\n    audience(id: $id) {\n      id\n      name\n      definition {\n        version\n        match\n        conditions {\n          __typename\n          ... on AttributeCondition {\n            field\n            operator\n            value\n          }\n          ... on SignedUpCondition {\n            operator\n            window {\n              amount\n              unit\n            }\n          }\n          ... on EventCondition {\n            eventType\n            operator\n            window {\n              amount\n              unit\n            }\n          }\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').AudienceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Countries {\n    countries {\n      code\n      name\n    }\n  }\n"): typeof import('./graphql').CountriesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AudiencePreviewCount($definition: AudienceFilterInput!) {\n    previewAudience(definition: $definition, first: 1) {\n      memberCount\n    }\n  }\n"): typeof import('./graphql').AudiencePreviewCountDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateAudience($input: CreateAudienceInput!) {\n    createAudience(input: $input) {\n      id\n    }\n  }\n"): typeof import('./graphql').CreateAudienceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateAudience($id: ID!, $input: UpdateAudienceInput!) {\n    updateAudience(id: $id, input: $input) {\n      id\n    }\n  }\n"): typeof import('./graphql').UpdateAudienceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ArchiveAudience($id: ID!) {\n    archiveAudience(id: $id) {\n      id\n    }\n  }\n"): typeof import('./graphql').ArchiveAudienceDocument;
 
 
 export function graphql(source: string) {

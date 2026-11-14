@@ -10,10 +10,12 @@ import {
   listAudiences,
   updateAudience,
 } from '@agents-review/db/audiences';
+import { listCustomerCountries } from '@agents-review/db/customers';
 import { parseAudienceName } from '@agents-review/shared/audience-filter';
 import { GraphQLError, GraphQLScalarType, Kind } from 'graphql';
 
 import { filterFromInput, filterToOutput } from './audience-filter-mapper.ts';
+import { toCountryOptions } from './countries.ts';
 import type { Resolvers } from './generated/graphql.ts';
 
 const MAX_PAGE_SIZE = 100;
@@ -71,6 +73,7 @@ export const resolvers: Resolvers = {
 
   Query: {
     hello: () => 'Hello from the API',
+    countries: async (_parent, _args, { db }) => toCountryOptions(await listCustomerCountries(db)),
     audiences: (_parent, _args, { db }) => listAudiences(db),
     audience: async (_parent, { id }, { db }) => {
       const audienceId = parseId(id);

@@ -373,6 +373,20 @@ describe('invalid filters', () => {
   });
 });
 
+describe('countries', () => {
+  it('lists every customer country once, named and sorted by name', async () => {
+    const result = await pool.query<{ country: string }>('select distinct country from customers');
+    const countries = at(await gql('{ countries { code name } }'), 'data', 'countries');
+    if (!Array.isArray(countries)) throw new Error('No countries returned.');
+
+    const codes = countries.map((country: unknown) => String(at(country, 'code')));
+    const names = countries.map((country: unknown) => String(at(country, 'name')));
+    expect(codes.toSorted()).toEqual(result.rows.map((row) => row.country).toSorted());
+    expect(names).toEqual(names.toSorted((a, b) => a.localeCompare(b, 'en')));
+    expect(countries).toContainEqual({ code: 'DEU', name: 'Germany' });
+  });
+});
+
 describe('hello', () => {
   it('still answers', async () => {
     expect(await gql('{ hello }')).toEqual({ data: { hello: 'Hello from the API' } });

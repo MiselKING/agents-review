@@ -121,6 +121,11 @@ Installed versions are pinned in `package.json` files and `pnpm-lock.yaml`; this
 | TypeScript | 7 | Language and type checker | New native compiler, about 10x faster type checks |
 | React + Vite | Vite 8 | UI library + dev server and bundler | Standard choice; Vite 8 builds with Rolldown (Rust), much faster builds |
 | TanStack Query | 5 | Fetches and caches server data in the UI | Handles caching, refetching and pagination so the UI code stays small |
+| React Router | 8 | Pages and navigation in the web app | The standard React router. Used in data-router mode; TanStack Query still does the data fetching |
+| Tailwind CSS | 4 | Styling | Utility classes next to the markup, no separate stylesheets; official Vite plugin |
+| Base UI | 1 | Unstyled, accessible components: the country combobox and the confirmation dialog | Keyboard and screen-reader behaviour built in, styled with Tailwind; from the Radix and MUI teams |
+| Testing Library + jsdom | 16 / 31 | Component tests in Vitest | Tests what the user sees and does, not component internals |
+| i18n-iso-countries | 7 | English country names in the API | Looks names up by 3-letter ISO code; the runtime's `Intl` only knows 2-letter codes |
 | graphql (graphql-js) | 17 | GraphQL reference implementation used by Yoga and codegen | Required peer of both; current major |
 | GraphQL Yoga | 6 | GraphQL server for the API | Light, built on the standard Fetch API, same team as GraphQL Code Generator |
 | GraphQL Code Generator | CLI 8, plugins 7 | Generates resolver types for the API and typed queries for the UI | API and UI share one typed contract; CI checks it's up to date. The UI calls the API with a small `fetch` wrapper inside TanStack Query, no extra GraphQL client |

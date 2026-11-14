@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 
 import { readPort } from '@agents-review/shared/env';
+import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
 
@@ -12,7 +13,7 @@ export default defineConfig(({ mode }) => {
   const apiPort = readPort('API_PORT', env);
 
   return {
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
     envDir: repoRoot,
     server: {
       port: readPort('WEB_PORT', env),
