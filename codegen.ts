@@ -11,6 +11,14 @@ const config: CodegenConfig = {
       config: {
         useTypeImports: true,
         enumsAsTypes: true,
+        contextType: '../context.ts#ApiContext',
+        scalars: { DateTime: { input: 'Date', output: 'Date' } },
+        // Resolvers return database rows; field resolvers turn them into the GraphQL shape.
+        mappers: {
+          Audience: '@agents-review/db/audiences#AudienceRow',
+          AudiencePreview: '../context.ts#PreviewParent',
+          Member: '@agents-review/db/audience-members#MemberRow',
+        },
       },
     },
     // Client: typed documents for the web app's `graphql()` calls.
@@ -21,6 +29,7 @@ const config: CodegenConfig = {
         documentMode: 'string',
         useTypeImports: true,
         enumsAsTypes: true,
+        scalars: { DateTime: 'string' },
       },
     },
   },

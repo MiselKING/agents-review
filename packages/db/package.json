@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/client.ts",
+    "./audiences": "./src/audiences.ts",
+    "./audience-members": "./src/audience-members.ts",
     "./schema": "./src/schema.ts"
   },
   "scripts": {

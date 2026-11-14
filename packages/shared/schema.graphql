@@ -1,3 +1,172 @@
+"An exact moment as an ISO 8601 string in UTC, like 2026-11-14T15:30:00.000Z."
+scalar DateTime
+
 type Query {
   hello: String!
+  "Audiences that aren't archived, newest first."
+  audiences: [Audience!]!
+  "Null when the audience doesn't exist or is archived."
+  audience(id: ID!): Audience
+  "Count and members for a filter without saving it. `first` is 1 to 100."
+  previewAudience(
+    definition: AudienceFilterInput!
+    first: Int = 25
+    after: String
+  ): AudiencePreview!
+}
+
+type Mutation {
+  createAudience(input: CreateAudienceInput!): Audience!
+  "Changes the name, the filter, or both. Fails for an unknown or archived audience."
+  updateAudience(id: ID!, input: UpdateAudienceInput!): Audience!
+  "Hides the audience; its sync history is kept. Fails for an unknown or archived audience."
+  archiveAudience(id: ID!): Audience!
+}
+
+type Audience {
+  id: ID!
+  name: String!
+  definition: AudienceFilter!
+  memberCount: Int!
+  "Members ordered by customer id. `first` is 1 to 100; `after` is the previous page's endCursor."
+  members(first: Int = 25, after: String): MemberConnection!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type AudiencePreview {
+  memberCount: Int!
+  members: MemberConnection!
+}
+
+type Member {
+  id: ID!
+  email: String!
+  firstName: String!
+  lastName: String!
+  "ISO 3166-1 alpha-3, like DEU."
+  country: String!
+}
+
+type MemberConnection {
+  nodes: [Member!]!
+  pageInfo: PageInfo!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  "Pass as `after` to get the next page. Null when the page is empty."
+  endCursor: String
+}
+
+"Customers match when ALL conditions are true, or when ANY one is."
+enum FilterMatch {
+  ALL
+  ANY
+}
+
+enum WindowUnit {
+  DAY
+  WEEK
+  MONTH
+}
+
+enum AttributeField {
+  COUNTRY
+}
+
+"""
+One enum for every condition, so a query can read `operator` on all condition types at once.
+Attribute: IS, IS_NOT. Signed up: WITHIN_LAST, MORE_THAN_AGO. Event: PERFORMED, NOT_PERFORMED,
+which also matches customers with no events at all. Other combinations are rejected.
+"""
+enum ConditionOperator {
+  IS
+  IS_NOT
+  WITHIN_LAST
+  MORE_THAN_AGO
+  PERFORMED
+  NOT_PERFORMED
+}
+
+"A period ending now, like the last 30 days."
+type TimeWindow {
+  amount: Int!
+  unit: WindowUnit!
+}
+
+type AttributeCondition {
+  field: AttributeField!
+  operator: ConditionOperator!
+  value: String!
+}
+
+type SignedUpCondition {
+  operator: ConditionOperator!
+  window: TimeWindow!
+}
+
+type EventCondition {
+  "An event type, like purchase or page_view."
+  eventType: String!
+  operator: ConditionOperator!
+  window: TimeWindow!
+}
+
+union FilterCondition = AttributeCondition | SignedUpCondition | EventCondition
+
+type AudienceFilter {
+  version: Int!
+  match: FilterMatch!
+  conditions: [FilterCondition!]!
+}
+
+"`amount` is a whole number from 1 to 1000."
+input TimeWindowInput {
+  amount: Int!
+  unit: WindowUnit!
+}
+
+"`value` is a country code of 3 uppercase letters, like DEU."
+input AttributeConditionInput {
+  field: AttributeField!
+  operator: ConditionOperator!
+  value: String!
+}
+
+input SignedUpConditionInput {
+  operator: ConditionOperator!
+  window: TimeWindowInput!
+}
+
+input EventConditionInput {
+  eventType: String!
+  operator: ConditionOperator!
+  window: TimeWindowInput!
+}
+
+"Exactly one field is set."
+input FilterConditionInput @oneOf {
+  attribute: AttributeConditionInput
+  signedUp: SignedUpConditionInput
+  event: EventConditionInput
+}
+
+"1 to 20 conditions."
+input AudienceFilterInput {
+  version: Int! = 1
+  match: FilterMatch!
+  conditions: [FilterConditionInput!]!
+}
+
+"`name` is trimmed and must be 1 to 100 characters."
+input CreateAudienceInput {
+  name: String!
+  definition: AudienceFilterInput!
+}
+
+"Fields left out keep their current value."
+input UpdateAudienceInput {
+  name: String
+  definition: AudienceFilterInput
 }

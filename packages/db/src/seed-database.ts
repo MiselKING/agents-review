@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 
 import type { Db } from './client.ts';
+import { seedSampleAudiences } from './sample-audiences.ts';
 import { customers, events } from './schema.ts';
 import { generateSeedData } from './seed-data.ts';
 
@@ -8,11 +9,14 @@ import { generateSeedData } from './seed-data.ts';
 const CUSTOMER_BATCH = 2000;
 const EVENT_BATCH = 5000;
 
-/** Replaces all customers and events with the seed rows. Audiences and sync runs are kept. */
+/**
+ * Replaces all customers and events with the seed rows, and adds sample audiences when there are
+ * none. Existing audiences and sync runs are kept.
+ */
 export async function seedDatabase(db: Db, now: Date = new Date()) {
   const data = generateSeedData(now);
 
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     // Restarting the identities gives the same ids on every run.
     await tx.execute(sql`truncate table ${events}, ${customers} restart identity`);
 
@@ -43,7 +47,8 @@ export async function seedDatabase(db: Db, now: Date = new Date()) {
       await tx.insert(events).values(rows);
     }
     /* oxlint-enable no-await-in-loop */
-  });
 
-  return { customers: data.customers.length, events: data.events.length };
+    const audiences = await seedSampleAudiences(tx);
+    return { customers: data.customers.length, events: data.events.length, audiences };
+  });
 }

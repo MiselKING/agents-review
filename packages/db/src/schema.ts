@@ -1,4 +1,5 @@
 // After any change: `pnpm db:generate`, then `pnpm db:migrate`.
+import type { AudienceFilter } from '@agents-review/shared/audience-filter';
 import type { EventProperties } from '@agents-review/shared/events';
 import { sql } from 'drizzle-orm';
 import {
@@ -77,8 +78,8 @@ export const events = pgTable(
 export const audiences = pgTable('audiences', {
   id: id(),
   name: text('name').notNull(),
-  // The filter tree. Its TypeScript type and validation come with the GraphQL API issue.
-  definition: jsonb('definition').notNull(),
+  // Validated with parseAudienceFilter from @agents-review/shared/audience-filter before it's written.
+  definition: jsonb('definition').$type<AudienceFilter>().notNull(),
   archivedAt: time('archived_at'),
   ...timestamps,
 });

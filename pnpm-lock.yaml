@@ -217,6 +217,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@agents-review/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@agents-review/shared':
         specifier: workspace:*
         version: link:../../packages/shared

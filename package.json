@@ -6,7 +6,7 @@
     "dev": "turbo run dev",
     "test": "turbo run test && pnpm test:hooks",
     "test:hooks": "node --test \".claude/hooks/*.test.ts\"",
-    "test:db": "pnpm --filter ./packages/db run test:db",
+    "test:db": "pnpm --recursive --workspace-concurrency=1 run test:db",
     "test:e2e": "pnpm --filter ./apps/web run test:e2e",
     "lint": "oxlint",
     "typecheck": "tsc -p tsconfig.json && turbo run typecheck",
