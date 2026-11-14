@@ -9,7 +9,7 @@ import {
   type SignedUpOperator,
   type TimeWindow,
   type WindowUnit,
-} from '@agents-review/shared/audiences';
+} from '@agents-review/shared/audience-filter';
 
 import type {
   AudienceFilter as GqlAudienceFilter,

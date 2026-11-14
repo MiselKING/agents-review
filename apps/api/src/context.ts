@@ -1,5 +1,5 @@
 import type { Queryable } from '@agents-review/db';
-import type { AudienceFilter } from '@agents-review/shared/audiences';
+import type { AudienceFilter } from '@agents-review/shared/audience-filter';
 
 export interface ApiContext {
   db: Queryable;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterFromInput, filterToOutput } from './filter-convert.ts';
+import { filterFromInput, filterToOutput } from './audience-filter-mapper.ts';
 import type { AudienceFilterInput } from './generated/graphql.ts';
 
 const input: AudienceFilterInput = {

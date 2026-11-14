@@ -1,4 +1,4 @@
-import type { AudienceFilter } from '@agents-review/shared/audiences';
+import type { AudienceFilter } from '@agents-review/shared/audience-filter';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 
 import type { Queryable } from './client.ts';

@@ -1,4 +1,8 @@
-import type { AudienceFilter, FilterCondition, TimeWindow } from '@agents-review/shared/audiences';
+import type {
+  AudienceFilter,
+  FilterCondition,
+  TimeWindow,
+} from '@agents-review/shared/audience-filter';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 

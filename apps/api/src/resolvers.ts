@@ -10,10 +10,10 @@ import {
   listAudiences,
   updateAudience,
 } from '@agents-review/db/audiences';
-import { parseAudienceName } from '@agents-review/shared/audiences';
+import { parseAudienceName } from '@agents-review/shared/audience-filter';
 import { GraphQLError, GraphQLScalarType, Kind } from 'graphql';
 
-import { filterFromInput, filterToOutput } from './filter-convert.ts';
+import { filterFromInput, filterToOutput } from './audience-filter-mapper.ts';
 import type { Resolvers } from './generated/graphql.ts';
 
 const MAX_PAGE_SIZE = 100;

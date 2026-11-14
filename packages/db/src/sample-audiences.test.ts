@@ -1,4 +1,4 @@
-import { parseAudienceFilter } from '@agents-review/shared/audiences';
+import { parseAudienceFilter } from '@agents-review/shared/audience-filter';
 import { describe, expect, it } from 'vitest';
 
 import { SAMPLE_AUDIENCES } from './sample-audiences.ts';

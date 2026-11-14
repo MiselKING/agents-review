@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./audiences": "./src/audiences.ts",
+    "./audience-filter": "./src/audience-filter.ts",
     "./env": "./src/env.ts",
     "./events": "./src/events.ts",
     "./schema": "./src/schema.ts",

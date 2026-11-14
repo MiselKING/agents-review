@@ -1,4 +1,4 @@
-import type { AudienceFilter } from '@agents-review/shared/audiences';
+import type { AudienceFilter } from '@agents-review/shared/audience-filter';
 
 import type { Queryable } from './client.ts';
 import { audiences } from './schema.ts';

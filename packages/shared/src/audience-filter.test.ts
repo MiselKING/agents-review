@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseAudienceFilter, parseAudienceName } from './audiences.ts';
+import { parseAudienceFilter, parseAudienceName } from './audience-filter.ts';
 
 const valid = {
   version: 1,

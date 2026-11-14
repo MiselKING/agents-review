@@ -3,7 +3,7 @@ import type {
   FilterCondition,
   TimeWindow,
   WindowUnit,
-} from '@agents-review/shared/audiences';
+} from '@agents-review/shared/audience-filter';
 import { and, asc, eq, gt, gte, lt, ne, or, type SQL, sql } from 'drizzle-orm';
 
 import type { Queryable } from './client.ts';
