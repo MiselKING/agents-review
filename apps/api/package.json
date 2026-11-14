@@ -7,9 +7,11 @@
     "dev": "node --env-file-if-exists=../../.env --watch src/index.ts",
     "start": "node --env-file-if-exists=../../.env src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:db": "vitest run --config vitest.db.config.ts"
   },
   "dependencies": {
+    "@agents-review/db": "workspace:*",
     "@agents-review/shared": "workspace:*",
     "graphql": "catalog:",
     "graphql-yoga": "^6.0.1"

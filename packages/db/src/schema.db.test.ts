@@ -1,31 +1,21 @@
+import type { AudienceFilter } from '@agents-review/shared/audiences';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { createDb } from './client.ts';
+import { inRollback as inRollbackOn, type Tx } from './rollback.ts';
 import { audiences, customers, events, syncBatches, syncRuns } from './schema.ts';
+
+const testDefinition: AudienceFilter = {
+  version: 1,
+  match: 'all',
+  conditions: [{ kind: 'attribute', field: 'country', operator: 'is', value: 'DEU' }],
+};
 
 const { db, pool } = createDb();
 afterAll(() => pool.end());
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-class Rollback extends Error {}
-
-/** Runs `run` in a transaction that is always rolled back, so tests leave no rows behind. */
-async function inRollback<T>(run: (tx: Tx) => Promise<T>): Promise<T> {
-  const results: { value: T }[] = [];
-  try {
-    await db.transaction(async (tx) => {
-      results.push({ value: await run(tx) });
-      throw new Rollback();
-    });
-  } catch (error) {
-    if (!(error instanceof Rollback)) throw error;
-  }
-  const [result] = results;
-  if (!result) throw new Error('The transaction did not finish.');
-  return result.value;
-}
+const inRollback = <T>(run: (tx: Tx) => Promise<T>) => inRollbackOn(db, run);
 
 function findConstraint(error: unknown): string | undefined {
   let current = error;
@@ -60,7 +50,7 @@ const customer = (email: string, country = 'DEU') => ({
 async function insertAudience(tx: Tx): Promise<number> {
   const [row] = await tx
     .insert(audiences)
-    .values({ name: 'Test audience', definition: {} })
+    .values({ name: 'Test audience', definition: testDefinition })
     .returning({ id: audiences.id });
   if (!row) throw new Error('Audience insert returned no row.');
   return row.id;

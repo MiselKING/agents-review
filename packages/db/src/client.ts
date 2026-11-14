@@ -1,5 +1,7 @@
 import { requireEnv } from '@agents-review/shared/env';
 import { drizzle } from 'drizzle-orm/node-postgres';
+import type { NodePgQueryResultHKT } from 'drizzle-orm/node-postgres';
+import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { Pool } from 'pg';
 
 import * as schema from './schema.ts';
@@ -14,3 +16,6 @@ export function createDb(connectionString: string = requireEnv('DATABASE_URL')) 
 }
 
 export type Db = ReturnType<typeof createDb>['db'];
+
+/** A database client or a transaction: query helpers take either. */
+export type Queryable = PgDatabase<NodePgQueryResultHKT, typeof schema>;
