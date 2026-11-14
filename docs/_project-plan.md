@@ -146,6 +146,7 @@ Both loops send work back to an agent, not to you. You see a PR once CI is green
 - **Review rules:** on PRs the action restores `CLAUDE.md`, `.claude/` and `.mcp.json` from the base branch, but not AGENTS.md or REVIEW.md. Add a step that restores REVIEW.md and every AGENTS.md before the Claude review.
 - **Plan gate:** the label-triggered run must build from the approved plan. Tell it in the prompt to read the issue's comments, and confirm on one feature that it does.
 - **CodeRabbit:** on a public repo with fewer than 10 stars it doesn't review on its own. Click **Trigger review** or comment `@coderabbitai review`. The open-source plan allows 1–10 reviews per hour.
+- **E2E in agent runs:** the action's runner has no Playwright browsers and no running Postgres. Have the agent run lint, typecheck and unit tests, and leave e2e to CI's `e2e` job. Until the `screenshot-ui` skill exists (Phase 6), add the screenshots for UI PRs by hand.
 - **Screenshots:** CI can't paste images into a PR comment. Upload them as a workflow artifact and link it, or commit them to a `screenshots` branch.
 - **Schedules:** GitHub disables scheduled workflows after 60 days without repo activity.
 - **Copilot PRs** (optional comparison): workflows don't run on Copilot's pushes until you click "Approve and run workflows", and your approval of a Copilot PR doesn't count.
@@ -233,22 +234,26 @@ Eight phases, in order, with no fixed timeline. If time runs short, cut the cust
 - ✅ **You:** run one headless task in the container (`claude -p ... --max-turns ... --dangerously-skip-permissions`). Confirm it can run the full test suite and that an edit to AGENTS.md is denied.
 - ✅ **You:** draft the 12 eval tasks in the private repo `agents-review-evals`, before Phase 3 shows what the setup is good at.
 
-**Phase 3: Product features through issues**
+**Phase 3: Core product features, built locally**
 
-- [ ] **You:** write 6 issues with `write-issue`: data model with seed data, GraphQL API, audience builder UI, member table, sync worker with the mock destination, run history page. The data-model issue also adds Postgres to the CI `e2e` job, as a service container, since that job runs inside Playwright's image.
-- [ ] **Agent:** build each in plan mode. Run two in parallel git worktrees, each with its own `.env` ports and database name.
+Four of the six product features. The other two, member table and run history page, wait for Phase 4, so the GitHub automation is proven on real issues.
+
+- [ ] **You:** write 4 issues with `write-issue`: data model with seed data, GraphQL API, audience builder UI, sync worker with the mock destination. The data-model issue defines every table the six features need, so no later feature changes the DB schema. It also adds Postgres to the CI `e2e` job, as a service container, since that job runs inside Playwright's image.
+- [ ] **Agent:** build each locally in plan mode. Data model first, then the GraphQL API, one at a time. Then the audience builder and the sync worker in parallel git worktrees, each with its own `.env` ports and database name.
 - [ ] **You:** review and merge. Add `apps/web/AGENTS.md` and `.claude/rules/` only when a mistake repeats.
 - [ ] **Agent drafts, you review:** the `write-tests` and `add-graphql-field` skills and the reviewer subagent, once there's a pattern to copy.
-- [ ] **You:** record the current `main` commit as the eval snapshot and write the 3 eval bugs as patches, both in the evals repo. Never seed them on `main`.
 
 **Phase 4: GitHub automation**
 
-- [ ] **You:** start the bare eval runs on the snapshot in the background: your "before" numbers.
 - [ ] **You:** install the Claude GitHub app, run `claude setup-token`, store the token as a repo secret.
 - [ ] **Agent drafts, you review:** Claude Code Action workflows: `@claude`, the `agent` label to a draft PR, review after CI passes. Work through the setup traps.
 - [ ] **You:** write REVIEW.md by hand. **Agent:** the step that restores REVIEW.md and every AGENTS.md before the Claude review.
 - [ ] **You:** install CodeRabbit. **Agent:** `.coderabbit.yaml` with REVIEW.md as a guideline file.
-- [ ] **You:** test the plan gate on one feature issue.
+- [ ] **You:** write the last 2 issues with `write-issue`: member table, run history page.
+- [ ] **Agent, through the main flow:** member table first, then run history page, one at a time. This is the plan-gate test: comment `@claude plan`, correct the plan, add the `agent` label, and confirm the build follows the approved plan. The CI-fix agent arrives in Phase 5, so when CI fails, comment `@claude` with the failure.
+- [ ] **You:** read the reviews and merge both. Fix the workflows, not the feature PR, when the automation is what failed.
+- [ ] **You:** once all six features are on `main`, record that commit as the eval snapshot and write the 3 eval bugs as patches, both in the evals repo. Never seed them on `main`.
+- [ ] **You:** start the bare eval runs on the snapshot in the background: your "before" numbers.
 - [ ] Optional, **you:** the Copilot comparison.
 
 **Phase 5: Self-healing and safety**
@@ -280,14 +285,14 @@ Eight phases, in order, with no fixed timeline. If time runs short, cut the cust
 
 Run the same 12 tasks with two setups, from the same snapshot of `main`, so only the agent setup changes.
 
-- **Bare** (Phase 4): no AGENTS.md, rules, skills, hooks or MCP, and no personal Claude config or memory.
+- **Bare** (Phase 4): no AGENTS.md, REVIEW.md, rules, skills, hooks or MCP, and no personal Claude config or memory.
 - **Full** (Phase 7): everything from this plan.
 
 **Where the evals live.** Everything sits in the private repo `agents-review-evals`: task texts, patches, hidden tests, reference fixes, the snapshot commit, the runner and the results. Nothing from it goes into this repo, because an agent that can read a task's tests or fix can copy the answer.
 
 **Task set** (each a real issue with acceptance criteria):
 
-- 3 bug fixes, on bugs you seed as patches at the end of Phase 3
+- 3 bug fixes, on bugs you seed as patches at the end of Phase 4
 - 3 small features: a new filter operator, a new column in run history, a GraphQL field end to end
 - 2 UI changes: copy and layout, checked by screenshot
 - 2 test tasks: raise coverage on the sync worker, add an e2e flow
