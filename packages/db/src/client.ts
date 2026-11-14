@@ -12,3 +12,5 @@ export function createDb(connectionString: string = requireEnv('DATABASE_URL')) 
   const db = drizzle({ client: pool, schema });
   return { db, pool };
 }
+
+export type Db = ReturnType<typeof createDb>['db'];

@@ -11,6 +11,7 @@ Run from the repo root.
 - Test one file: `pnpm --filter ./<package-dir> exec vitest run <path-inside-package>` ← use this while iterating
   - Example: `pnpm --filter ./services/sync-worker exec vitest run src/batch.test.ts`
 - Test all: `pnpm test`
+- Test database: `pnpm test:db` (needs Postgres up and migrated; reseeds customers and events)
 - E2E: `pnpm test:e2e` (needs Postgres up; Playwright starts the app itself)
 - Lint + typecheck: `pnpm lint && pnpm typecheck`
 - Format: `pnpm format`

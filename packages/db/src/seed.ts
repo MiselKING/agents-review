@@ -1,14 +1,17 @@
-// Seed data arrives with the data model (Phase 3). For now this checks the connection.
 import { requireEnv } from '@agents-review/shared/env';
-import { sql } from 'drizzle-orm';
 
 import { createDb, describeDatabaseUrl } from './client.ts';
+import { seedDatabase } from './seed-database.ts';
 
 const databaseUrl = requireEnv('DATABASE_URL');
 const { db, pool } = createDb(databaseUrl);
 try {
-  await db.execute(sql`select 1`);
-  console.log(`Connected to ${describeDatabaseUrl(databaseUrl)}. Nothing to seed yet.`);
+  const started = Date.now();
+  const counts = await seedDatabase(db);
+  const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  console.log(
+    `Seeded ${counts.customers} customers and ${counts.events} events into ${describeDatabaseUrl(databaseUrl)} in ${seconds}s.`,
+  );
 } finally {
   await pool.end();
 }
