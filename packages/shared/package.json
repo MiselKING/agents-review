@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./env": "./src/env.ts",
+    "./events": "./src/events.ts",
     "./schema": "./src/schema.ts",
     "./schema.graphql": "./schema.graphql"
   },

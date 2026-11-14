@@ -106,7 +106,8 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 - Compose runs Postgres only; `pnpm dev` runs the apps and services
 - Commits follow Conventional Commits
 - One-time setup rules (ports from env, Vite `strictPort`, `/graphql` proxy) live in the scaffold issue, not in AGENTS.md
-- Seed data comes with the data model in Phase 3; the Phase 1 scaffold has no tables
+- Five tables: `customers`, `events`, `audiences`, `sync_runs`, `sync_batches`. `pnpm db:seed` reloads 10,000 customers and 90,000 events; event dates are relative to the day it runs
+- Tests that need Postgres are named `*.db.test.ts` and run with `pnpm test:db`, after `pnpm db:migrate`. `pnpm test` stays database-free
 
 ## Core packages (checked 2026-11-08)
 

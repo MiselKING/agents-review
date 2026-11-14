@@ -72,6 +72,10 @@ jobs:
       - name: First-time setup
         timeout-minutes: 5
         run: cp .env.example .env && pnpm install && docker compose up -d && pnpm db:migrate && pnpm db:seed
+      # Needs the migrated database from the step above.
+      - name: Database tests
+        timeout-minutes: 3
+        run: pnpm test:db
 
   e2e:
     runs-on: ubuntu-26.04
@@ -80,6 +84,22 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.65.0-resolute@sha256:4d70b558dbaff71611b2f3e7a32aa2b4d42cfc892078ad368cb7ea229c2ffd1f
       options: --user 1001
+    # This image has no Docker, so Postgres runs beside the job. Keep the tag equal to docker-compose.yml.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agents_review
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d agents_review"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The service's hostname is its name. Real env vars win over the copied .env.
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/agents_review
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 2
@@ -92,6 +112,9 @@ jobs:
           save-cache: false
           require-lockfile: true
       - run: cp .env.example .env
+      - name: Migrate and seed
+        timeout-minutes: 3
+        run: pnpm db:migrate && pnpm db:seed
       - name: E2E tests
         timeout-minutes: 10
         run: pnpm test:e2e
