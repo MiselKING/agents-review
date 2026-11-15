@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createDestination, maskEmails, parseRetryAfter } from './destination.ts';
+import { createDestination, MAX_ERROR_LENGTH, maskEmails, parseRetryAfter } from './destination.ts';
 import { type FakePlatform, type Step, startFakePlatform } from './test/fake-platform.ts';
 
 const platforms: FakePlatform[] = [];
@@ -56,6 +56,16 @@ describe('createDestination', () => {
     const { outcome } = await sendOnce({ status: 400, error: 'Bad email ann@example.com.' });
     expect(outcome).toEqual({ kind: 'rejected', error: 'HTTP 400: Bad email [email]' });
   });
+
+  it('reports a key reused with a different batch apart from other refusals', async () => {
+    const { outcome } = await sendOnce({ status: 422, error: 'Key already used.' });
+    expect(outcome).toEqual({ kind: 'key_reused', error: 'HTTP 422: Key already used.' });
+  });
+
+  it(`cuts a long error to ${MAX_ERROR_LENGTH} characters`, async () => {
+    const { outcome } = await sendOnce({ status: 400, error: 'x'.repeat(1000) });
+    expect(outcome.kind === 'rejected' ? outcome.error : '').toHaveLength(MAX_ERROR_LENGTH);
+  });
 });
 
 describe('parseRetryAfter', () => {
@@ -66,11 +76,12 @@ describe('parseRetryAfter', () => {
     expect(parseRetryAfter('Sun, 15 Nov 2026 12:00:30 GMT', now)).toBe(30);
   });
 
-  it('waits at least 1 and at most 3600 seconds', () => {
+  it('asks for at least 1 second, and passes long waits on for the worker to judge', () => {
     expect(parseRetryAfter(null, now)).toBe(1);
     expect(parseRetryAfter('0', now)).toBe(1);
     expect(parseRetryAfter('soon', now)).toBe(1);
-    expect(parseRetryAfter('999999', now)).toBe(3600);
+    expect(parseRetryAfter('Sun, 15 Nov 2026 11:00:00 GMT', now)).toBe(1);
+    expect(parseRetryAfter('86400', now)).toBe(86_400);
   });
 });
 

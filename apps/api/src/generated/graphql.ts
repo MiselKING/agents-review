@@ -2,7 +2,7 @@ import type { GraphQLResolveInfo, GraphQLScalarType, GraphQLScalarTypeConfig } f
 import type { AudienceRow } from '@agents-review/db/audiences';
 import type { PreviewParent, ApiContext } from '../context.ts';
 import type { MemberRow } from '@agents-review/db/audience-members';
-import type { SyncRunRow } from '@agents-review/db/sync-runs';
+import type { SyncRunWithAudience } from '@agents-review/db/sync-runs';
 export type Maybe<T> = T | null;
 export type InputMaybe<T> = Maybe<T>;
 export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
@@ -398,7 +398,7 @@ export type ResolversTypes = {
   SignedUpCondition: ResolverTypeWrapper<SignedUpCondition>;
   SignedUpConditionInput: SignedUpConditionInput;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
-  SyncRun: ResolverTypeWrapper<SyncRunRow>;
+  SyncRun: ResolverTypeWrapper<SyncRunWithAudience>;
   SyncRunConnection: ResolverTypeWrapper<Omit<SyncRunConnection, 'nodes'> & { nodes: Array<ResolversTypes['SyncRun']> }>;
   SyncRunStatus: SyncRunStatus;
   TimeWindow: ResolverTypeWrapper<TimeWindow>;
@@ -433,7 +433,7 @@ export type ResolversParentTypes = {
   SignedUpCondition: SignedUpCondition;
   SignedUpConditionInput: SignedUpConditionInput;
   String: Scalars['String']['output'];
-  SyncRun: SyncRunRow;
+  SyncRun: SyncRunWithAudience;
   SyncRunConnection: Omit<SyncRunConnection, 'nodes'> & { nodes: Array<ResolversParentTypes['SyncRun']> };
   TimeWindow: TimeWindow;
   TimeWindowInput: TimeWindowInput;
