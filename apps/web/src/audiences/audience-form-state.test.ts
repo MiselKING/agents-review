@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  type AudienceDraft,
-  draftFromAudience,
-  emptyDraft,
-  filterInputFromDraft,
+  type AudienceFormState,
+  formStateFromAudience,
+  emptyFormState,
+  filterInputFromFormState,
   hasErrors,
   newCondition,
-  validateDraft,
-} from './audience-draft';
+  validateFormState,
+} from './audience-form-state';
 
-const complete: AudienceDraft = {
+const complete: AudienceFormState = {
   name: '  Buyers  ',
   match: 'ANY',
   conditions: [
@@ -31,9 +31,9 @@ const complete: AudienceDraft = {
   ],
 };
 
-describe('filterInputFromDraft', () => {
-  it("builds the API's filter input from a complete draft", () => {
-    expect(filterInputFromDraft(complete)).toEqual({
+describe('filterInputFromFormState', () => {
+  it("builds the API's filter input from a completely filled form", () => {
+    expect(filterInputFromFormState(complete)).toEqual({
       version: 1,
       match: 'ANY',
       conditions: [
@@ -51,26 +51,26 @@ describe('filterInputFromDraft', () => {
   });
 
   it('returns null while a condition is incomplete or invalid', () => {
-    expect(filterInputFromDraft(emptyDraft())).toBeNull();
+    expect(filterInputFromFormState(emptyFormState())).toBeNull();
     for (const amount of ['', '0', '1001', '2.5', 'abc']) {
-      const draft: AudienceDraft = {
+      const state: AudienceFormState = {
         ...complete,
         conditions: [
           { id: 'x', kind: 'signedUp', operator: 'WITHIN_LAST', window: { amount, unit: 'DAY' } },
         ],
       };
-      expect(filterInputFromDraft(draft)).toBeNull();
+      expect(filterInputFromFormState(state)).toBeNull();
     }
   });
 });
 
-describe('validateDraft', () => {
-  it('finds no problems in a complete draft', () => {
-    expect(hasErrors(validateDraft(complete))).toBe(false);
+describe('validateFormState', () => {
+  it('finds no problems in a completely filled form', () => {
+    expect(hasErrors(validateFormState(complete))).toBe(false);
   });
 
   it('names each problem by field', () => {
-    const errors = validateDraft({
+    const errors = validateFormState({
       name: '   ',
       match: 'ALL',
       conditions: [
@@ -101,7 +101,9 @@ describe('validateDraft', () => {
   });
 
   it('rejects a name longer than 100 characters', () => {
-    expect(validateDraft({ ...complete, name: 'x'.repeat(101) }).name).toMatch(/100 characters/);
+    expect(validateFormState({ ...complete, name: 'x'.repeat(101) }).name).toMatch(
+      /100 characters/,
+    );
   });
 });
 
@@ -115,9 +117,9 @@ describe('newCondition', () => {
   });
 });
 
-describe('draftFromAudience', () => {
+describe('formStateFromAudience', () => {
   it('turns a saved audience back into the same filter', () => {
-    const draft = draftFromAudience({
+    const state = formStateFromAudience({
       id: '1',
       name: 'Buyers',
       definition: {
@@ -139,7 +141,7 @@ describe('draftFromAudience', () => {
         ],
       },
     });
-    expect(draft.name).toBe('Buyers');
-    expect(filterInputFromDraft(draft)).toEqual(filterInputFromDraft(complete));
+    expect(state.name).toBe('Buyers');
+    expect(filterInputFromFormState(state)).toEqual(filterInputFromFormState(complete));
   });
 });

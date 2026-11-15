@@ -19,14 +19,23 @@ export function ErrorState({ title, error }: { title: string; error: unknown }) 
   );
 }
 
-export function NotFoundState({ title, children }: { title: string; children?: ReactNode }) {
+/** A full-page message, like "not found", with one link to go on from there. */
+export function PageMessage({
+  title,
+  children,
+  link,
+}: {
+  title: string;
+  children?: ReactNode;
+  link: { to: string; label: string };
+}) {
   return (
     <div className="py-16 text-center">
       <title>{`${title} · Agents-Driven Flow`}</title>
       <h1 className="text-xl font-semibold text-slate-900">{title}</h1>
       {children ? <p className="mt-2 text-sm text-slate-600">{children}</p> : null}
-      <ButtonLink to="/" variant="secondary" className="mt-6">
-        Back to audiences
+      <ButtonLink to={link.to} variant="secondary" className="mt-6">
+        {link.label}
       </ButtonLink>
     </div>
   );

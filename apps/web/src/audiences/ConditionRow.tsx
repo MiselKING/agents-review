@@ -4,26 +4,26 @@ import type { WindowUnit } from '../gql/graphql';
 import { Button } from '../ui/Button';
 import {
   CONDITION_KINDS,
-  type ConditionDraft,
+  type ConditionFormState,
   type ConditionErrors,
   type ConditionKind,
   eventTypeLabel,
   newCondition,
   OPERATORS,
   WINDOW_UNITS,
-  type WindowDraft,
-} from './audience-draft';
+  type WindowFormState,
+} from './audience-form-state';
 import { CountryCombobox } from './CountryCombobox';
 
 const controlClasses =
   'h-9 rounded-md border border-slate-300 bg-white px-2.5 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 aria-invalid:border-red-500';
 
 interface ConditionRowProps {
-  condition: ConditionDraft;
+  condition: ConditionFormState;
   position: number;
   errors: ConditionErrors;
   canRemove: boolean;
-  onChange: (condition: ConditionDraft) => void;
+  onChange: (condition: ConditionFormState) => void;
   onRemove: () => void;
   onTouch: (field: 'country' | 'amount') => void;
 }
@@ -75,9 +75,9 @@ function WindowFields({
 }: {
   idPrefix: string;
   labelPrefix: string;
-  window: WindowDraft;
+  window: WindowFormState;
   error: string | undefined;
-  onChange: (window: WindowDraft) => void;
+  onChange: (window: WindowFormState) => void;
   onTouch: () => void;
 }) {
   return (

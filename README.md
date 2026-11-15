@@ -36,7 +36,28 @@ Install these first:
 | Docker | with Compose (`docker compose`) | [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows and macOS, Docker Engine on Linux |
 | Git | any recent | [git-scm.com](https://git-scm.com) |
 
-Then run the first-time setup command from [AGENTS.md](AGENTS.md#commands). On Windows, run it in Git Bash or PowerShell 7, because it uses `cp` and `&&`.
+## Run it
+On Windows, use Git Bash or PowerShell 7 (the commands use `cp` and `&&`).
+
+First time:
+```bash
+cp .env.example .env
+pnpm install
+docker compose up -d
+pnpm db:migrate
+pnpm db:seed
+```
+
+Every time:
+```bash
+docker compose up -d
+pnpm dev
+```
+Open http://localhost:5173. The API is at http://localhost:4000/graphql.
+
+View the data: `pnpm --filter ./packages/db exec drizzle-kit studio`, then open https://local.drizzle.studio.
+
+Stop: `Ctrl+C`, then `docker compose stop`. Tests and other commands are in [AGENTS.md](AGENTS.md#commands).
 
 ## Dev container (optional)
 Use it when Claude should work on its own, without you approving each step, for example a long task or a batch of test runs. Claude then works in a sealed-off container:

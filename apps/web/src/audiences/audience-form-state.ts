@@ -10,34 +10,34 @@ import type { AudienceFilterInput, AudienceQuery, FilterMatch, WindowUnit } from
 export { MAX_FILTER_CONDITIONS };
 
 /** A time window as typed: the amount stays text until it is valid. */
-export interface WindowDraft {
+export interface WindowFormState {
   amount: string;
   unit: WindowUnit;
 }
 
-export type ConditionDraft =
+export type ConditionFormState =
   | { id: string; kind: 'country'; operator: 'IS' | 'IS_NOT'; country: string | null }
   | {
       id: string;
       kind: 'signedUp';
       operator: 'WITHIN_LAST' | 'MORE_THAN_AGO';
-      window: WindowDraft;
+      window: WindowFormState;
     }
   | {
       id: string;
       kind: 'event';
       operator: 'PERFORMED' | 'NOT_PERFORMED';
       eventType: string;
-      window: WindowDraft;
+      window: WindowFormState;
     };
 
-export type ConditionKind = ConditionDraft['kind'];
+export type ConditionKind = ConditionFormState['kind'];
 
 /** The builder's form state, which may be incomplete or invalid. */
-export interface AudienceDraft {
+export interface AudienceFormState {
   name: string;
   match: FilterMatch;
-  conditions: ConditionDraft[];
+  conditions: ConditionFormState[];
 }
 
 export interface ConditionErrors {
@@ -46,7 +46,7 @@ export interface ConditionErrors {
   eventType?: string;
 }
 
-export interface DraftErrors {
+export interface FormErrors {
   name?: string;
   conditions: Record<string, ConditionErrors>;
 }
@@ -84,18 +84,18 @@ export const eventTypeLabel = (eventType: string) => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-const DEFAULT_WINDOW: WindowDraft = { amount: '30', unit: 'DAY' };
+const DEFAULT_WINDOW: WindowFormState = { amount: '30', unit: 'DAY' };
 
 export function newCondition(
   kind: ConditionKind,
   id: string = crypto.randomUUID(),
-): ConditionDraft {
+): ConditionFormState {
   if (kind === 'country') return { id, kind, operator: 'IS', country: null };
   if (kind === 'signedUp') return { id, kind, operator: 'WITHIN_LAST', window: DEFAULT_WINDOW };
   return { id, kind, operator: 'PERFORMED', eventType: EVENT_TYPES[0], window: DEFAULT_WINDOW };
 }
 
-export const emptyDraft = (): AudienceDraft => ({
+export const emptyFormState = (): AudienceFormState => ({
   name: '',
   match: 'ALL',
   conditions: [newCondition('country')],
@@ -104,7 +104,7 @@ export const emptyDraft = (): AudienceDraft => ({
 type SavedAudience = NonNullable<AudienceQuery['audience']>;
 type SavedCondition = SavedAudience['definition']['conditions'][number];
 
-function conditionFromSaved(condition: SavedCondition): ConditionDraft {
+function conditionFromSaved(condition: SavedCondition): ConditionFormState {
   const id = crypto.randomUUID();
   if (condition.__typename === 'AttributeCondition') {
     const operator = condition.operator === 'IS_NOT' ? 'IS_NOT' : 'IS';
@@ -119,7 +119,7 @@ function conditionFromSaved(condition: SavedCondition): ConditionDraft {
   return { id, kind: 'event', operator, eventType: condition.eventType, window };
 }
 
-export const draftFromAudience = (audience: SavedAudience): AudienceDraft => ({
+export const formStateFromAudience = (audience: SavedAudience): AudienceFormState => ({
   name: audience.name,
   match: audience.definition.match,
   conditions: audience.definition.conditions.map(conditionFromSaved),
@@ -131,7 +131,7 @@ function parseAmount(amount: string): number | undefined {
   return value >= 1 && value <= MAX_WINDOW_AMOUNT ? value : undefined;
 }
 
-function conditionErrors(condition: ConditionDraft): ConditionErrors {
+function conditionErrors(condition: ConditionFormState): ConditionErrors {
   const errors: ConditionErrors = {};
   if (condition.kind === 'country' && condition.country === null) {
     errors.country = 'Choose a country.';
@@ -149,32 +149,32 @@ function conditionErrors(condition: ConditionDraft): ConditionErrors {
 }
 
 /** The problems to show next to each field. Mirrors the API's rules; the API stays the authority. */
-export function validateDraft(draft: AudienceDraft): DraftErrors {
-  const name = draft.name.trim();
-  const errors: DraftErrors = { conditions: {} };
+export function validateFormState(state: AudienceFormState): FormErrors {
+  const name = state.name.trim();
+  const errors: FormErrors = { conditions: {} };
   if (name.length === 0) errors.name = 'Enter a name.';
   else if (name.length > MAX_AUDIENCE_NAME_LENGTH) {
     errors.name = `Use ${MAX_AUDIENCE_NAME_LENGTH} characters or fewer.`;
   }
-  for (const condition of draft.conditions) {
+  for (const condition of state.conditions) {
     const found = conditionErrors(condition);
     if (Object.keys(found).length > 0) errors.conditions[condition.id] = found;
   }
   return errors;
 }
 
-export const hasErrors = (errors: DraftErrors) =>
+export const hasErrors = (errors: FormErrors) =>
   errors.name !== undefined || Object.keys(errors.conditions).length > 0;
 
-const windowInput = (window: WindowDraft) => {
+const windowInput = (window: WindowFormState) => {
   const amount = parseAmount(window.amount);
   return amount === undefined ? undefined : { amount, unit: window.unit };
 };
 
 /** The filter to send to the API, or null while any condition is incomplete or invalid. */
-export function filterInputFromDraft(draft: AudienceDraft): AudienceFilterInput | null {
+export function filterInputFromFormState(state: AudienceFormState): AudienceFilterInput | null {
   const conditions: AudienceFilterInput['conditions'] = [];
-  for (const condition of draft.conditions) {
+  for (const condition of state.conditions) {
     if (Object.keys(conditionErrors(condition)).length > 0) return null;
     if (condition.kind === 'country') {
       if (condition.country === null) return null;
@@ -191,5 +191,5 @@ export function filterInputFromDraft(draft: AudienceDraft): AudienceFilterInput 
         : { event: { eventType: condition.eventType, operator: condition.operator, window } },
     );
   }
-  return conditions.length > 0 ? { version: 1, match: draft.match, conditions } : null;
+  return conditions.length > 0 ? { version: 1, match: state.match, conditions } : null;
 }

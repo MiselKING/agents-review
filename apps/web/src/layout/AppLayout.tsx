@@ -1,6 +1,6 @@
 import { isRouteErrorResponse, Link, Outlet, useLocation, useRouteError } from 'react-router';
 
-import { NotFoundState } from '../ui/states';
+import { PageMessage } from '../ui/states';
 
 /** A header link that stays highlighted on every page of its section. */
 function SectionLink({ to, section, children }: { to: string; section: string; children: string }) {
@@ -49,6 +49,8 @@ export function AppLayout() {
   );
 }
 
+const homeLink = { to: '/', label: 'Go to the home page' };
+
 /** Shown for unknown addresses and for errors no page handled. */
 export function RouteError() {
   const error = useRouteError();
@@ -56,11 +58,13 @@ export function RouteError() {
   return (
     <Shell>
       {notFound ? (
-        <NotFoundState title="Page not found">There is no page at this address.</NotFoundState>
+        <PageMessage title="Page not found" link={homeLink}>
+          There is no page at this address.
+        </PageMessage>
       ) : (
-        <NotFoundState title="Something went wrong">
-          Reload the page, or go back to audiences.
-        </NotFoundState>
+        <PageMessage title="Something went wrong" link={homeLink}>
+          Reload the page, or start again from the home page.
+        </PageMessage>
       )}
     </Shell>
   );

@@ -4,19 +4,19 @@ import type { FilterMatch } from '../gql/graphql';
 import { Button, ButtonLink } from '../ui/Button';
 import type { AudienceValues } from './api';
 import {
-  type AudienceDraft,
-  type ConditionDraft,
-  filterInputFromDraft,
+  type AudienceFormState,
+  type ConditionFormState,
+  filterInputFromFormState,
   hasErrors,
   MAX_FILTER_CONDITIONS,
   newCondition,
-  validateDraft,
-} from './audience-draft';
+  validateFormState,
+} from './audience-form-state';
 import { ConditionRow } from './ConditionRow';
 import { MemberCountPreview } from './MemberCountPreview';
 
 interface AudienceFormProps {
-  initial: AudienceDraft;
+  initial: AudienceFormState;
   submitLabel: string;
   isSaving: boolean;
   saveError: Error | null;
@@ -35,14 +35,14 @@ export function AudienceForm({
   saveError,
   onSave,
 }: AudienceFormProps) {
-  const [draft, setDraft] = useState(initial);
+  const [state, setState] = useState(initial);
   // Errors show once a field was left, or for every field after a save attempt.
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [saveAttempts, setSaveAttempts] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const errors = validateDraft(draft);
-  const filter = filterInputFromDraft(draft);
+  const errors = validateFormState(state);
+  const filter = filterInputFromFormState(state);
   const isShown = (key: string) => saveAttempts > 0 || touched.has(key);
   const touch = (key: string) => setTouched((current) => new Set(current).add(key));
 
@@ -51,8 +51,8 @@ export function AudienceForm({
       formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
   }, [saveAttempts]);
 
-  const updateCondition = (updated: ConditionDraft) =>
-    setDraft((current) => ({
+  const updateCondition = (updated: ConditionFormState) =>
+    setState((current) => ({
       ...current,
       conditions: current.conditions.map((condition) =>
         condition.id === updated.id ? updated : condition,
@@ -60,19 +60,19 @@ export function AudienceForm({
     }));
 
   const removeCondition = (id: string) =>
-    setDraft((current) => ({
+    setState((current) => ({
       ...current,
       conditions: current.conditions.filter((condition) => condition.id !== id),
     }));
 
   const addCondition = () =>
-    setDraft((current) => ({
+    setState((current) => ({
       ...current,
       conditions: [...current.conditions, newCondition('country')],
     }));
 
   const nameError = isShown('name') ? errors.name : undefined;
-  const canAdd = draft.conditions.length < MAX_FILTER_CONDITIONS;
+  const canAdd = state.conditions.length < MAX_FILTER_CONDITIONS;
 
   return (
     <form
@@ -84,7 +84,7 @@ export function AudienceForm({
           setSaveAttempts((count) => count + 1);
           return;
         }
-        onSave({ name: draft.name.trim(), definition: filter });
+        onSave({ name: state.name.trim(), definition: filter });
       }}
       className="space-y-6"
     >
@@ -104,8 +104,8 @@ export function AudienceForm({
         </label>
         <input
           id="audience-name"
-          value={draft.name}
-          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          value={state.name}
+          onChange={(event) => setState({ ...state, name: event.target.value })}
           onBlur={() => touch('name')}
           aria-invalid={nameError !== undefined}
           aria-describedby={nameError ? 'audience-name-error' : undefined}
@@ -127,8 +127,8 @@ export function AudienceForm({
                 type="radio"
                 name="match"
                 value={option.value}
-                checked={draft.match === option.value}
-                onChange={() => setDraft({ ...draft, match: option.value })}
+                checked={state.match === option.value}
+                onChange={() => setState({ ...state, match: option.value })}
                 className="size-4 accent-indigo-600"
               />
               {option.label}
@@ -137,7 +137,7 @@ export function AudienceForm({
         </div>
 
         <ol className="space-y-2" aria-label="Conditions">
-          {draft.conditions.map((condition, index) => (
+          {state.conditions.map((condition, index) => (
             <ConditionRow
               key={condition.id}
               condition={condition}
@@ -147,7 +147,7 @@ export function AudienceForm({
                   isShown(`${condition.id}.${field}`),
                 ),
               )}
-              canRemove={draft.conditions.length > 1}
+              canRemove={state.conditions.length > 1}
               onChange={updateCondition}
               onRemove={() => removeCondition(condition.id)}
               onTouch={(field) => touch(`${condition.id}.${field}`)}
@@ -161,7 +161,7 @@ export function AudienceForm({
           </Button>
           <span className="text-xs text-slate-500">
             {canAdd
-              ? `${draft.conditions.length} of ${MAX_FILTER_CONDITIONS} conditions`
+              ? `${state.conditions.length} of ${MAX_FILTER_CONDITIONS} conditions`
               : `The limit is ${MAX_FILTER_CONDITIONS} conditions.`}
           </span>
         </div>

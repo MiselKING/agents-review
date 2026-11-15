@@ -1,8 +1,8 @@
 import { useNavigate, useParams } from 'react-router';
 
-import { ErrorState, LoadingState, NotFoundState } from '../ui/states';
+import { ErrorState, LoadingState, PageMessage } from '../ui/states';
 import { useAudience, useCreateAudience, useUpdateAudience } from './api';
-import { draftFromAudience, emptyDraft } from './audience-draft';
+import { formStateFromAudience, emptyFormState } from './audience-form-state';
 import { AudienceForm } from './AudienceForm';
 
 function PageHeading({ title }: { title: string }) {
@@ -22,7 +22,7 @@ export function NewAudiencePage() {
     <section className="space-y-6">
       <PageHeading title="New audience" />
       <AudienceForm
-        initial={emptyDraft()}
+        initial={emptyFormState()}
         submitLabel="Create audience"
         isSaving={create.isPending}
         saveError={create.error}
@@ -43,9 +43,9 @@ export function EditAudiencePage() {
     return <ErrorState title="The audience could not be loaded." error={audience.error} />;
   if (!audience.data) {
     return (
-      <NotFoundState title="Audience not found">
+      <PageMessage title="Audience not found" link={{ to: '/', label: 'Back to audiences' }}>
         It may have been archived, or the address is wrong.
-      </NotFoundState>
+      </PageMessage>
     );
   }
 
@@ -55,7 +55,7 @@ export function EditAudiencePage() {
       <AudienceForm
         // Start from the saved audience again if another audience is opened.
         key={audience.data.id}
-        initial={draftFromAudience(audience.data)}
+        initial={formStateFromAudience(audience.data)}
         submitLabel="Save changes"
         isSaving={update.isPending}
         saveError={update.error}

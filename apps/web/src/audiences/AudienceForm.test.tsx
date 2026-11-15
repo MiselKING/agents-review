@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { mockGraphql, renderWithProviders } from '../test/render';
 import type { AudienceValues } from './api';
-import { emptyDraft } from './audience-draft';
+import { emptyFormState } from './audience-form-state';
 import { AudienceForm } from './AudienceForm';
 
 const countries = [
@@ -30,7 +30,7 @@ function renderForm() {
   const onSave = vi.fn<(values: AudienceValues) => void>();
   renderWithProviders(
     <AudienceForm
-      initial={emptyDraft()}
+      initial={emptyFormState()}
       submitLabel="Create audience"
       isSaving={false}
       saveError={null}
@@ -186,7 +186,7 @@ describe('AudienceForm', () => {
   it('shows an error from the API and keeps what was entered', () => {
     renderWithProviders(
       <AudienceForm
-        initial={{ ...emptyDraft(), name: 'Kept' }}
+        initial={{ ...emptyFormState(), name: 'Kept' }}
         submitLabel="Create audience"
         isSaving={false}
         saveError={new Error('definition.version 2 is not supported.')}
