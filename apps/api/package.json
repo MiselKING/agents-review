@@ -14,7 +14,8 @@
     "@agents-review/db": "workspace:*",
     "@agents-review/shared": "workspace:*",
     "graphql": "catalog:",
-    "graphql-yoga": "^6.0.1"
+    "graphql-yoga": "^6.0.1",
+    "i18n-iso-countries": "^7.14.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -26,6 +26,11 @@
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/no-deprecated": "error",
     "unicorn/prefer-node-protocol": "error",
+    "import/no-unassigned-import": [
+      "warn",
+      { "allow": ["**/*.css", "@testing-library/jest-dom/vitest"] }
+    ],
+    "no-underscore-dangle": ["warn", { "allow": ["__typename"] }],
     "no-restricted-imports": [
       "error",
       {

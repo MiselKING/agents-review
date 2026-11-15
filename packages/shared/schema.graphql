@@ -3,6 +3,8 @@ scalar DateTime
 
 type Query {
   hello: String!
+  "Countries at least one customer has, sorted by name."
+  countries: [Country!]!
   "Audiences that aren't archived, newest first."
   audiences: [Audience!]!
   "Null when the audience doesn't exist or is archived."
@@ -37,6 +39,14 @@ type Audience {
 type AudiencePreview {
   memberCount: Int!
   members: MemberConnection!
+}
+
+"A country customers can be filtered by."
+type Country {
+  "ISO 3166-1 alpha-3, like DEU. This is what a filter stores."
+  code: String!
+  "English name, like Germany. The code when the name is unknown."
+  name: String!
 }
 
 type Member {

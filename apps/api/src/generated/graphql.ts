@@ -85,6 +85,15 @@ export type ConditionOperator =
   | 'PERFORMED'
   | 'WITHIN_LAST';
 
+/** A country customers can be filtered by. */
+export type Country = {
+  __typename?: 'Country';
+  /** ISO 3166-1 alpha-3, like DEU. This is what a filter stores. */
+  code: Scalars['String']['output'];
+  /** English name, like Germany. The code when the name is unknown. */
+  name: Scalars['String']['output'];
+};
+
 /** `name` is trimmed and must be 1 to 100 characters. */
 export type CreateAudienceInput = {
   definition: AudienceFilterInput;
@@ -172,6 +181,8 @@ export type Query = {
   audience?: Maybe<Audience>;
   /** Audiences that aren't archived, newest first. */
   audiences: Array<Audience>;
+  /** Countries at least one customer has, sorted by name. */
+  countries: Array<Country>;
   hello: Scalars['String']['output'];
   /** Count and members for a filter without saving it. `first` is 1 to 100. */
   previewAudience: AudiencePreview;
@@ -314,6 +325,7 @@ export type ResolversTypes = {
   AudiencePreview: ResolverTypeWrapper<PreviewParent>;
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   ConditionOperator: ConditionOperator;
+  Country: ResolverTypeWrapper<Country>;
   CreateAudienceInput: CreateAudienceInput;
   DateTime: ResolverTypeWrapper<Scalars['DateTime']['output']>;
   EventCondition: ResolverTypeWrapper<EventCondition>;
@@ -346,6 +358,7 @@ export type ResolversParentTypes = {
   AudienceFilterInput: AudienceFilterInput;
   AudiencePreview: PreviewParent;
   Boolean: Scalars['Boolean']['output'];
+  Country: Country;
   CreateAudienceInput: CreateAudienceInput;
   DateTime: Scalars['DateTime']['output'];
   EventCondition: EventCondition;
@@ -395,6 +408,11 @@ export type AudiencePreviewResolvers<ContextType = ApiContext, ParentType extend
   members?: Resolver<ResolversTypes['MemberConnection'], ParentType, ContextType>;
 };
 
+export type CountryResolvers<ContextType = ApiContext, ParentType extends ResolversParentTypes['Country'] = ResolversParentTypes['Country']> = {
+  code?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+};
+
 export interface DateTimeScalarConfig extends GraphQLScalarTypeConfig<ResolversTypes['DateTime'], any> {
   name: 'DateTime';
 }
@@ -437,6 +455,7 @@ export type PageInfoResolvers<ContextType = ApiContext, ParentType extends Resol
 export type QueryResolvers<ContextType = ApiContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = {
   audience?: Resolver<Maybe<ResolversTypes['Audience']>, ParentType, ContextType, RequireFields<QueryAudienceArgs, 'id'>>;
   audiences?: Resolver<Array<ResolversTypes['Audience']>, ParentType, ContextType>;
+  countries?: Resolver<Array<ResolversTypes['Country']>, ParentType, ContextType>;
   hello?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   previewAudience?: Resolver<ResolversTypes['AudiencePreview'], ParentType, ContextType, RequireFields<QueryPreviewAudienceArgs, 'definition' | 'first'>>;
 };
@@ -457,6 +476,7 @@ export type Resolvers<ContextType = ApiContext> = {
   Audience?: AudienceResolvers<ContextType>;
   AudienceFilter?: AudienceFilterResolvers<ContextType>;
   AudiencePreview?: AudiencePreviewResolvers<ContextType>;
+  Country?: CountryResolvers<ContextType>;
   DateTime?: GraphQLScalarType;
   EventCondition?: EventConditionResolvers<ContextType>;
   FilterCondition?: FilterConditionResolvers<ContextType>;
