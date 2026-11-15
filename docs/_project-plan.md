@@ -249,7 +249,7 @@ Four of the six product features. The other two, member table and run history pa
 - [ ] **Agent drafts, you review:** Claude Code Action workflows: `@claude`, the `agent` label to a draft PR, review after CI passes. Work through the setup traps.
 - [ ] **You:** write REVIEW.md by hand. **Agent:** the step that restores REVIEW.md and every AGENTS.md before the Claude review.
 - [ ] **You:** install CodeRabbit. **Agent:** `.coderabbit.yaml` with REVIEW.md as a guideline file.
-- [ ] **You:** write the last 2 issues with `write-issue`: member table, run history page.
+- [ ] **You:** write the last 2 issues with `write-issue`: member table, run history page. The run history issue also adds the "Sync now" button, which the sync worker issue left out on purpose.
 - [ ] **Agent, through the main flow:** member table first, then run history page, one at a time. This is the plan-gate test: comment `@claude plan`, correct the plan, add the `agent` label, and confirm the build follows the approved plan. The CI-fix agent arrives in Phase 5, so when CI fails, comment `@claude` with the failure.
 - [ ] **You:** read the reviews and merge both. Fix the workflows, not the feature PR, when the automation is what failed.
 - [ ] **You:** once all six features are on `main`, record that commit as the eval snapshot and write the 3 eval bugs as patches, both in the evals repo. Never seed them on `main`.
