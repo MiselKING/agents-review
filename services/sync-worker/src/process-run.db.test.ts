@@ -432,6 +432,44 @@ describe('processRun', () => {
     expect((await heartbeat()).heartbeat_at).toEqual(after.heartbeat_at);
   });
 
+  it('waits for a heartbeat write still in flight before it returns', async () => {
+    const platform = await startPlatform(['hang']);
+    const { runId } = await audienceWithRun(10);
+    // Snapshot first, so from here on only heartbeats write to the run's row.
+    await snapshotSyncRun(db, runId, BATCH_SIZE, new Date());
+    const { deps, controller } = workerFor(platform);
+    deps.policy = { ...deps.policy, heartbeatMs: 50 };
+    platform.hooks.onRequest = () => controller.abort();
+    const heartbeatAt = async () =>
+      firstRow(
+        (
+          await pool.query<{ heartbeat_at: Date }>(
+            'select heartbeat_at from sync_runs where id = $1',
+            [runId],
+          )
+        ).rows,
+      ).heartbeat_at;
+    const before = await heartbeatAt();
+
+    // Holding the row lock makes each heartbeat write wait until the lock is released.
+    const lock = await pool.connect();
+    await lock.query('begin');
+    await lock.query('select id from sync_runs where id = $1 for update', [runId]);
+    const released = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await lock.query('commit');
+      lock.release();
+    })();
+
+    expect(await processRun(deps, runId)).toBe('stopped');
+    const returned = await heartbeatAt();
+    await released;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(returned.getTime()).toBeGreaterThan(before.getTime());
+    expect(await heartbeatAt()).toEqual(returned);
+  });
+
   it('still syncs an audience archived after its run started', async () => {
     const platform = await startPlatform();
     const { audienceId, runId, customerIds } = await audienceWithRun(5);

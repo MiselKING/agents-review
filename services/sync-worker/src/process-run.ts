@@ -148,10 +148,13 @@ async function sendBatch(deps: WorkerDeps, runId: number, audienceId: number, ba
  */
 export async function processRun(deps: WorkerDeps, runId: number): Promise<'finished' | 'stopped'> {
   const { db, policy, log, signal } = deps;
+  let beating: Promise<void> | undefined;
   const heartbeat = setInterval(() => {
-    heartbeatSyncRun(db, runId).catch((error: unknown) =>
-      log(`run ${runId}: heartbeat failed: ${describeError(error)}`),
-    );
+    beating ??= heartbeatSyncRun(db, runId)
+      .catch((error: unknown) => log(`run ${runId}: heartbeat failed: ${describeError(error)}`))
+      .finally(() => {
+        beating = undefined;
+      });
   }, policy.heartbeatMs);
 
   try {
@@ -177,5 +180,6 @@ export async function processRun(deps: WorkerDeps, runId: number): Promise<'fini
     return 'finished';
   } finally {
     clearInterval(heartbeat);
+    await beating;
   }
 }
