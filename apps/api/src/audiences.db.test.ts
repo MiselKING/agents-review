@@ -1,46 +1,17 @@
 import { createDb } from '@agents-review/db';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { at, graphqlClient } from './test/graphql.ts';
 import { createApi } from './yoga.ts';
 
 const { db, pool } = createDb();
-const api = createApi(db);
+const gql = graphqlClient(createApi(db));
 const createdIds: string[] = [];
 
 afterAll(async () => {
   await pool.query('delete from audiences where id = any($1::bigint[])', [createdIds]);
   await pool.end();
 });
-
-interface GqlResponse {
-  data?: unknown;
-  errors?: { message: string; extensions?: { code?: unknown } }[];
-}
-
-const isGqlResponse = (value: unknown): value is GqlResponse =>
-  typeof value === 'object' && value !== null && ('data' in value || 'errors' in value);
-
-async function gql(query: string, variables: Record<string, unknown> = {}): Promise<GqlResponse> {
-  const response = await api.fetch('http://localhost/graphql', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query, variables }),
-  });
-  const body: unknown = await response.json();
-  if (!isGqlResponse(body)) throw new Error(`Not a GraphQL response: ${JSON.stringify(body)}`);
-  return body;
-}
-
-/** Reads a nested value, like at(body, 'data', 'audience', 'id'). */
-function at(value: unknown, ...path: (string | number)[]): unknown {
-  let current = value;
-  for (const key of path) {
-    if (typeof current !== 'object' || current === null) return undefined;
-    const next: unknown = Reflect.get(current, key);
-    current = next;
-  }
-  return current;
-}
 
 function idsOf(connection: unknown): number[] {
   const nodes = at(connection, 'nodes');

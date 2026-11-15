@@ -2,6 +2,7 @@ import type { GraphQLResolveInfo, GraphQLScalarType, GraphQLScalarTypeConfig } f
 import type { AudienceRow } from '@agents-review/db/audiences';
 import type { PreviewParent, ApiContext } from '../context.ts';
 import type { MemberRow } from '@agents-review/db/audience-members';
+import type { SyncRunRow } from '@agents-review/db/sync-runs';
 export type Maybe<T> = T | null;
 export type InputMaybe<T> = Maybe<T>;
 export type Omit<T, K extends keyof T> = Pick<T, Exclude<keyof T, K>>;
@@ -148,6 +149,8 @@ export type Mutation = {
   /** Hides the audience; its sync history is kept. Fails for an unknown or archived audience. */
   archiveAudience: Audience;
   createAudience: Audience;
+  /** Queues a sync of the audience's current members. Fails for an unknown or archived audience, or when a sync of it is already queued or running. */
+  startSync: SyncRun;
   /** Changes the name, the filter, or both. Fails for an unknown or archived audience. */
   updateAudience: Audience;
 };
@@ -160,6 +163,11 @@ export type MutationArchiveAudienceArgs = {
 
 export type MutationCreateAudienceArgs = {
   input: CreateAudienceInput;
+};
+
+
+export type MutationStartSyncArgs = {
+  audienceId: Scalars['ID']['input'];
 };
 
 
@@ -186,6 +194,10 @@ export type Query = {
   hello: Scalars['String']['output'];
   /** Count and members for a filter without saving it. `first` is 1 to 100. */
   previewAudience: AudiencePreview;
+  /** Null when the run doesn't exist. */
+  syncRun?: Maybe<SyncRun>;
+  /** Runs newest first, for one audience or all. `first` is 1 to 100; `after` is the previous page's endCursor. */
+  syncRuns: SyncRunConnection;
 };
 
 
@@ -200,6 +212,18 @@ export type QueryPreviewAudienceArgs = {
   first?: InputMaybe<Scalars['Int']['input']>;
 };
 
+
+export type QuerySyncRunArgs = {
+  id: Scalars['ID']['input'];
+};
+
+
+export type QuerySyncRunsArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
+  audienceId?: InputMaybe<Scalars['ID']['input']>;
+  first?: InputMaybe<Scalars['Int']['input']>;
+};
+
 export type SignedUpCondition = {
   __typename?: 'SignedUpCondition';
   operator: ConditionOperator;
@@ -210,6 +234,37 @@ export type SignedUpConditionInput = {
   operator: ConditionOperator;
   window: TimeWindowInput;
 };
+
+/** One sync of an audience's members to the ad platform. */
+export type SyncRun = {
+  __typename?: 'SyncRun';
+  audience: Audience;
+  createdAt: Scalars['DateTime']['output'];
+  /** Why the run failed. Null unless the status is FAILED. */
+  error?: Maybe<Scalars['String']['output']>;
+  /** Members in batches that failed. */
+  failedCount: Scalars['Int']['output'];
+  finishedAt?: Maybe<Scalars['DateTime']['output']>;
+  id: Scalars['ID']['output'];
+  /** Members in the snapshot taken when the run started. */
+  memberCount: Scalars['Int']['output'];
+  startedAt?: Maybe<Scalars['DateTime']['output']>;
+  status: SyncRunStatus;
+  /** Members in batches the ad platform accepted. */
+  syncedCount: Scalars['Int']['output'];
+};
+
+export type SyncRunConnection = {
+  __typename?: 'SyncRunConnection';
+  nodes: Array<SyncRun>;
+  pageInfo: PageInfo;
+};
+
+export type SyncRunStatus =
+  | 'FAILED'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCEEDED';
 
 /** A period ending now, like the last 30 days. */
 export type TimeWindow = {
@@ -343,6 +398,9 @@ export type ResolversTypes = {
   SignedUpCondition: ResolverTypeWrapper<SignedUpCondition>;
   SignedUpConditionInput: SignedUpConditionInput;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
+  SyncRun: ResolverTypeWrapper<SyncRunRow>;
+  SyncRunConnection: ResolverTypeWrapper<Omit<SyncRunConnection, 'nodes'> & { nodes: Array<ResolversTypes['SyncRun']> }>;
+  SyncRunStatus: SyncRunStatus;
   TimeWindow: ResolverTypeWrapper<TimeWindow>;
   TimeWindowInput: TimeWindowInput;
   UpdateAudienceInput: UpdateAudienceInput;
@@ -375,6 +433,8 @@ export type ResolversParentTypes = {
   SignedUpCondition: SignedUpCondition;
   SignedUpConditionInput: SignedUpConditionInput;
   String: Scalars['String']['output'];
+  SyncRun: SyncRunRow;
+  SyncRunConnection: Omit<SyncRunConnection, 'nodes'> & { nodes: Array<ResolversParentTypes['SyncRun']> };
   TimeWindow: TimeWindow;
   TimeWindowInput: TimeWindowInput;
   UpdateAudienceInput: UpdateAudienceInput;
@@ -444,6 +504,7 @@ export type MemberConnectionResolvers<ContextType = ApiContext, ParentType exten
 export type MutationResolvers<ContextType = ApiContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = {
   archiveAudience?: Resolver<ResolversTypes['Audience'], ParentType, ContextType, RequireFields<MutationArchiveAudienceArgs, 'id'>>;
   createAudience?: Resolver<ResolversTypes['Audience'], ParentType, ContextType, RequireFields<MutationCreateAudienceArgs, 'input'>>;
+  startSync?: Resolver<ResolversTypes['SyncRun'], ParentType, ContextType, RequireFields<MutationStartSyncArgs, 'audienceId'>>;
   updateAudience?: Resolver<ResolversTypes['Audience'], ParentType, ContextType, RequireFields<MutationUpdateAudienceArgs, 'id' | 'input'>>;
 };
 
@@ -458,12 +519,32 @@ export type QueryResolvers<ContextType = ApiContext, ParentType extends Resolver
   countries?: Resolver<Array<ResolversTypes['Country']>, ParentType, ContextType>;
   hello?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   previewAudience?: Resolver<ResolversTypes['AudiencePreview'], ParentType, ContextType, RequireFields<QueryPreviewAudienceArgs, 'definition' | 'first'>>;
+  syncRun?: Resolver<Maybe<ResolversTypes['SyncRun']>, ParentType, ContextType, RequireFields<QuerySyncRunArgs, 'id'>>;
+  syncRuns?: Resolver<ResolversTypes['SyncRunConnection'], ParentType, ContextType, RequireFields<QuerySyncRunsArgs, 'first'>>;
 };
 
 export type SignedUpConditionResolvers<ContextType = ApiContext, ParentType extends ResolversParentTypes['SignedUpCondition'] = ResolversParentTypes['SignedUpCondition']> = {
   operator?: Resolver<ResolversTypes['ConditionOperator'], ParentType, ContextType>;
   window?: Resolver<ResolversTypes['TimeWindow'], ParentType, ContextType>;
   __isTypeOf?: IsTypeOfResolverFn<ParentType, ContextType>;
+};
+
+export type SyncRunResolvers<ContextType = ApiContext, ParentType extends ResolversParentTypes['SyncRun'] = ResolversParentTypes['SyncRun']> = {
+  audience?: Resolver<ResolversTypes['Audience'], ParentType, ContextType>;
+  createdAt?: Resolver<ResolversTypes['DateTime'], ParentType, ContextType>;
+  error?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
+  failedCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  finishedAt?: Resolver<Maybe<ResolversTypes['DateTime']>, ParentType, ContextType>;
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  memberCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+  startedAt?: Resolver<Maybe<ResolversTypes['DateTime']>, ParentType, ContextType>;
+  status?: Resolver<ResolversTypes['SyncRunStatus'], ParentType, ContextType>;
+  syncedCount?: Resolver<ResolversTypes['Int'], ParentType, ContextType>;
+};
+
+export type SyncRunConnectionResolvers<ContextType = ApiContext, ParentType extends ResolversParentTypes['SyncRunConnection'] = ResolversParentTypes['SyncRunConnection']> = {
+  nodes?: Resolver<Array<ResolversTypes['SyncRun']>, ParentType, ContextType>;
+  pageInfo?: Resolver<ResolversTypes['PageInfo'], ParentType, ContextType>;
 };
 
 export type TimeWindowResolvers<ContextType = ApiContext, ParentType extends ResolversParentTypes['TimeWindow'] = ResolversParentTypes['TimeWindow']> = {
@@ -486,6 +567,8 @@ export type Resolvers<ContextType = ApiContext> = {
   PageInfo?: PageInfoResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
   SignedUpCondition?: SignedUpConditionResolvers<ContextType>;
+  SyncRun?: SyncRunResolvers<ContextType>;
+  SyncRunConnection?: SyncRunConnectionResolvers<ContextType>;
   TimeWindow?: TimeWindowResolvers<ContextType>;
 };
 

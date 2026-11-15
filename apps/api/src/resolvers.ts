@@ -6,17 +6,24 @@ import {
 import {
   archiveAudience,
   findAudience,
+  findAudienceIncludingArchived,
   insertAudience,
   listAudiences,
   updateAudience,
 } from '@agents-review/db/audiences';
 import { listCustomerCountries } from '@agents-review/db/customers';
+import {
+  findSyncRun,
+  listSyncRuns,
+  startSyncRun,
+  type SyncRunRow,
+} from '@agents-review/db/sync-runs';
 import { parseAudienceName } from '@agents-review/shared/audience-filter';
 import { GraphQLError, GraphQLScalarType, Kind } from 'graphql';
 
 import { filterFromInput, filterToOutput } from './audience-filter-mapper.ts';
 import { toCountryOptions } from './countries.ts';
-import type { Resolvers } from './generated/graphql.ts';
+import type { Resolvers, SyncRunStatus } from './generated/graphql.ts';
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 25;
@@ -26,6 +33,13 @@ const badInput = (errors: string[]) =>
 
 const notFound = (id: string) =>
   new GraphQLError(`Audience ${id} not found.`, { extensions: { code: 'NOT_FOUND' } });
+
+const SYNC_RUN_STATUSES: Record<SyncRunRow['status'], SyncRunStatus> = {
+  queued: 'QUEUED',
+  running: 'RUNNING',
+  succeeded: 'SUCCEEDED',
+  failed: 'FAILED',
+};
 
 /** A database id from a GraphQL ID or cursor, or undefined when it can't be one. */
 function parseId(value: string): number | undefined {
@@ -85,6 +99,21 @@ export const resolvers: Resolvers = {
       if (!filter.ok) throw badInput(filter.errors);
       return { filter: filter.value, page: parsePage(first, after) };
     },
+    syncRuns: async (_parent, { audienceId, first, after }, { db }) => {
+      const page = parsePage(first, after);
+      const audience = typeof audienceId === 'string' ? parseId(audienceId) : undefined;
+      if (typeof audienceId === 'string' && audience === undefined) {
+        return { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
+      }
+      const { runs, hasNextPage } = await listSyncRuns(db, { ...page, audienceId: audience });
+      const last = runs.at(-1);
+      return { nodes: runs, pageInfo: { hasNextPage, endCursor: last ? String(last.id) : null } };
+    },
+    syncRun: async (_parent, { id }, { db }) => {
+      const runId = parseId(id);
+      if (runId === undefined) return null;
+      return (await findSyncRun(db, runId)) ?? null;
+    },
   },
 
   Mutation: {
@@ -122,6 +151,18 @@ export const resolvers: Resolvers = {
       if (!archived) throw notFound(id);
       return archived;
     },
+    startSync: async (_parent, { audienceId }, { db }) => {
+      const id = parseId(audienceId);
+      const audience = id === undefined ? undefined : await findAudience(db, id);
+      if (!audience) throw notFound(audienceId);
+      const started = await startSyncRun(db, audience.id);
+      if (!started.ok) {
+        throw new GraphQLError('A sync of this audience is already queued or running.', {
+          extensions: { code: 'SYNC_IN_PROGRESS' },
+        });
+      }
+      return started.run;
+    },
   },
 
   Audience: {
@@ -143,6 +184,16 @@ export const resolvers: Resolvers = {
 
   Member: {
     id: (member) => String(member.id),
+  },
+
+  SyncRun: {
+    id: (run) => String(run.id),
+    audience: async (run, _args, { db }) => {
+      const audience = await findAudienceIncludingArchived(db, run.audienceId);
+      if (!audience) throw new Error(`Sync run ${run.id} has no audience.`);
+      return audience;
+    },
+    status: (run) => SYNC_RUN_STATUSES[run.status],
   },
 
   FilterCondition: {

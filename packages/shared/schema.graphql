@@ -15,6 +15,10 @@ type Query {
     first: Int = 25
     after: String
   ): AudiencePreview!
+  "Runs newest first, for one audience or all. `first` is 1 to 100; `after` is the previous page's endCursor."
+  syncRuns(audienceId: ID, first: Int = 25, after: String): SyncRunConnection!
+  "Null when the run doesn't exist."
+  syncRun(id: ID!): SyncRun
 }
 
 type Mutation {
@@ -23,6 +27,8 @@ type Mutation {
   updateAudience(id: ID!, input: UpdateAudienceInput!): Audience!
   "Hides the audience; its sync history is kept. Fails for an unknown or archived audience."
   archiveAudience(id: ID!): Audience!
+  "Queues a sync of the audience's current members. Fails for an unknown or archived audience, or when a sync of it is already queued or running."
+  startSync(audienceId: ID!): SyncRun!
 }
 
 type Audience {
@@ -179,4 +185,34 @@ input CreateAudienceInput {
 input UpdateAudienceInput {
   name: String
   definition: AudienceFilterInput
+}
+
+enum SyncRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+"One sync of an audience's members to the ad platform."
+type SyncRun {
+  id: ID!
+  audience: Audience!
+  status: SyncRunStatus!
+  "Members in the snapshot taken when the run started."
+  memberCount: Int!
+  "Members in batches the ad platform accepted."
+  syncedCount: Int!
+  "Members in batches that failed."
+  failedCount: Int!
+  "Why the run failed. Null unless the status is FAILED."
+  error: String
+  createdAt: DateTime!
+  startedAt: DateTime
+  finishedAt: DateTime
+}
+
+type SyncRunConnection {
+  nodes: [SyncRun!]!
+  pageInfo: PageInfo!
 }
