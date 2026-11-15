@@ -9,7 +9,8 @@ Run from the repo root.
 - Install: `pnpm install`
 - Dev: `docker compose up -d && pnpm dev` (web :5173, API :4000/graphql, mock destination :4100, Postgres :5432)
 - Test one file: `pnpm --filter ./<package-dir> exec vitest run <path-inside-package>` ← use this while iterating
-  - Example: `pnpm --filter ./services/sync-worker exec vitest run src/batch.test.ts`
+  - Example: `pnpm --filter ./services/sync-worker exec vitest run src/destination.test.ts`
+  - Database test (`*.db.test.ts`, needs Postgres up and migrated): add `--config vitest.db.config.ts`, e.g. `pnpm --filter ./apps/api exec vitest run --config vitest.db.config.ts src/sync-runs.db.test.ts`
 - Test all: `pnpm test`
 - Test database: `pnpm test:db` (needs Postgres up and migrated; reseeds customers and events)
 - E2E: `pnpm test:e2e` (needs Postgres up; Playwright starts the app itself)

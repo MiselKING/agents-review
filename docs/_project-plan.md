@@ -82,7 +82,7 @@ agents-review/
 │   ├── hooks/                 # hook scripts in TypeScript, with tests
 │   ├── rules/                 # Claude-only path-scoped rules
 │   ├── skills/                # write-issue, fix-bug, write-tests, screenshot-ui, add-graphql-field
-│   └── agents/                # reviewer subagent
+│   └── agents/                # subagents (if we add any)
 ├── .mcp.json                  # team-shared MCP servers
 ├── .coderabbit.yaml
 ├── renovate.json
@@ -102,7 +102,6 @@ agents-review/
 - **Failing test first** (Phase 5): the `fix-bug` skill writes a test that reproduces the bug, confirms it fails, then creates a gitignored lock file in the repo root. While the lock exists, a PreToolUse hook blocks edits to test files, so the agent fixes the code instead of weakening the test. That needs a hook, because a static rule can't depend on the lock. The hook covers only the Edit and Write tools, so CI backs it up: on PRs labelled `bug`, the new tests must fail on `main` and pass on the branch.
 - **REVIEW.md** is the review policy: three passes (bugs, security, match with acceptance criteria), what counts as Important versus a nit, at most 5 nits, and what to skip. Copilot code review reads it automatically. CodeRabbit and the Claude Code Action don't: list it in `.coderabbit.yaml` under `knowledge_base.code_guidelines.filePatterns`, and name it in the Claude review prompt.
 - **Skills** are repeatable workflows the agent pulls in when relevant. `write-issue` runs only when you call it.
-- **Reviewer subagent** checks a diff against AGENTS.md before you look at it.
 - **`.mcp.json`** holds GitHub's MCP server (run from its Docker image with a fine-grained token, toolsets limited so there's no merge tool) and your custom server.
 - **Dev container** starts from Anthropic's reference container. Its default-deny firewall is what makes unattended runs reasonable, and it's the only place to skip permission prompts. Claude Code's built-in sandbox isn't used: it doesn't run on native Windows. In WSL you can turn it on for yourself with `/sandbox`.
 
@@ -122,7 +121,7 @@ Both loops send work back to an agent, not to you. You see a PR once CI is green
 | 2 | You add the `agent` label. For features, comment `@claude plan` first | Claude posts a plan (features), then builds from the approved plan, runs tests and pushes; a workflow step opens the draft PR | Features: read the plan, correct it in a comment, then add the label to approve |
 | 3 | CI fails | Claude reads the failed log and pushes one fix | Take over if it fails again |
 | 4 | CI passes | A workflow marks the PR ready; Claude reviews it against REVIEW.md, and runs a security review if sensitive paths changed | Comment `@coderabbitai review`; read the reviews |
-| 5 | You comment `@claude …` | Claude commits the requested changes to the same branch | Review and ask for changes |
+| 5 | You comment `@claude fix comments...` | Claude commits the requested changes to the same branch | Review and ask for changes |
 | 6 | You're done reviewing | — | Merge through your approval bypass (the PR is opened under your account, so you can't approve it). CI must be green |
 
 **Side flows** (each joins the main flow at step 3)
@@ -241,7 +240,7 @@ Four of the six product features. The other two, member table and run history pa
 - ✅ **You:** write 4 issues with `write-issue`: data model with seed data, GraphQL API, audience builder UI, sync worker with the mock destination. The data-model issue defines every table the six features need, so no later feature changes the DB schema. It also adds Postgres to the CI `e2e` job, as a service container, since that job runs inside Playwright's image.
 - ✅ **Agent:** build each locally in plan mode. Data model first, then the GraphQL API, one at a time. Then the audience builder and the sync worker in parallel git worktrees, each with its own `.env` ports and database name.
 - ✅ **You:** review and merge. Add `apps/web/AGENTS.md` and `.claude/rules/` only when a mistake repeats.
-- [ ] **Agent drafts, you review:** the `write-tests` and `add-graphql-field` skills and the reviewer subagent, once there's a pattern to copy.
+- ✅ **Agent drafts, you review:** the `write-tests` and `add-graphql-field` skills, once there's a pattern to copy. No reviewer subagent: the Claude review and CodeRabbit on every PR already cover it.
 
 **Phase 4: GitHub automation**
 
