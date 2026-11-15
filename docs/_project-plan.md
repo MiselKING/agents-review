@@ -81,7 +81,8 @@ agents-review/
 │   ├── settings.json          # permissions, hooks
 │   ├── hooks/                 # hook scripts in TypeScript, with tests
 │   ├── rules/                 # Claude-only path-scoped rules
-│   └── skills/                # write-issue, fix-bug, write-tests, screenshot-ui, add-graphql-field
+│   ├── skills/                # write-issue, fix-bug, write-tests, screenshot-ui, add-graphql-field
+│   └── agents/                # subagents (if we add any)
 ├── .mcp.json                  # team-shared MCP servers
 ├── .coderabbit.yaml
 ├── renovate.json
