@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import {
+  IDEMPOTENCY_CONFLICT_STATUS,
+  IDEMPOTENCY_KEY_HEADER,
+  MAX_IDEMPOTENCY_KEY_LENGTH as MAX_KEY_LENGTH,
+} from '@agents-review/shared/ad-platform';
+
 import { type Member, parseBatch } from './batch.ts';
 import { createRateLimiter } from './rate-limiter.ts';
 
 export const MAX_BODY_BYTES = 1024 * 1024;
-const MAX_KEY_LENGTH = 255;
 const MEMBERS_PATH = /^\/audiences\/([\w-]{1,64})\/members$/;
 
 export interface AppOptions {
@@ -90,7 +95,7 @@ export function createApp(options: AppOptions) {
       };
     }
 
-    const key = req.headers['idempotency-key'];
+    const key = req.headers[IDEMPOTENCY_KEY_HEADER];
     let text: string;
     try {
       text = await readBody(req);
@@ -122,7 +127,7 @@ export function createApp(options: AppOptions) {
     const known = remembered.get(key);
     if (known && known.fingerprint !== fingerprint) {
       return {
-        status: 422,
+        status: IDEMPOTENCY_CONFLICT_STATUS,
         body: { error: 'This Idempotency-Key was already used with a different batch.' },
       };
     }

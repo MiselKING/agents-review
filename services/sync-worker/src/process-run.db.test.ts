@@ -228,31 +228,89 @@ describe('processRun', () => {
     expect(await batchRows(runId)).toMatchObject([{ status: 'sent', attempts: 1 }]);
   });
 
-  it('counts only rate limits in a row: any other answer starts the count again', async () => {
-    const rateLimited: Step = { status: 429, retryAfter: '1' };
+  it('waits a rate limit of exactly 60 s, but fails at once when asked to wait longer', async () => {
     const platform = await startPlatform([
-      ...Array.from({ length: 19 }, () => rateLimited),
-      'fail-before',
-      rateLimited,
+      { status: 429, retryAfter: '60' },
+      'ok',
+      { status: 429, retryAfter: '3600' },
     ]);
-    const { runId } = await audienceWithRun(10);
-    await processRun(workerFor(platform).deps, runId);
+    const { runId } = await audienceWithRun(150);
+    const { deps, sleeps } = workerFor(platform);
+    await processRun(deps, runId);
 
-    expect(platform.requests).toHaveLength(22);
-    expect(await batchRows(runId)).toMatchObject([{ status: 'sent', attempts: 2 }]);
+    expect(sleeps).toEqual([60_000]);
+    expect(platform.requests).toHaveLength(3);
+    expect(await batchRows(runId)).toMatchObject([
+      { status: 'sent', attempts: 1 },
+      {
+        status: 'failed',
+        attempts: 0,
+        last_error: 'Rate limited for 3600 s, longer than the 60 s the worker waits.',
+      },
+    ]);
   });
 
-  it('fails a batch that is rate limited 20 times in a row', async () => {
+  it('fails a batch once its rate-limit waits would pass 2 minutes in total', async () => {
     const platform = await startPlatform(
-      Array.from({ length: 20 }, () => ({ status: 429, retryAfter: '1' })),
+      Array.from({ length: 5 }, () => ({ status: 429, retryAfter: '30' })),
     );
     const { runId } = await audienceWithRun(10);
-    await processRun(workerFor(platform).deps, runId);
+    const { deps, sleeps } = workerFor(platform);
+    await processRun(deps, runId);
 
-    expect(platform.requests).toHaveLength(20);
+    expect(sleeps).toEqual([30_000, 30_000, 30_000, 30_000]);
+    expect(platform.requests).toHaveLength(5);
     expect(await batchRows(runId)).toMatchObject([
-      { status: 'failed', attempts: 0, last_error: 'Rate limited 20 times in a row.' },
+      { status: 'failed', attempts: 0, last_error: 'Rate limited for more than 120 s in total.' },
     ]);
+  });
+
+  it('counts a resend the platform refuses as delivered when an earlier attempt reached it', async () => {
+    // The platform stores the batch but answers 500; the worker stops while waiting to retry.
+    const platform = await startPlatform(['fail-after']);
+    const { audienceId, runId, customerIds } = await audienceWithRun(5);
+    const first = workerFor(platform);
+    first.deps.sleep = () => {
+      first.controller.abort();
+      return Promise.resolve();
+    };
+    expect(await processRun(first.deps, runId)).toBe('stopped');
+
+    // A customer is deleted before the resume, so the resend differs and gets a 422.
+    await pool.query('delete from customers where id = $1', [customerIds[0]]);
+    const second = workerFor(platform);
+    await processRun(second.deps, runId);
+
+    expect(platform.requests.map((request) => request.memberIds.length)).toEqual([5, 4]);
+    expect(platform.stored(String(audienceId))).toEqual(customerIds);
+    expect(await batchRows(runId)).toMatchObject([
+      { status: 'sent', attempts: 2, last_error: null },
+    ]);
+    expect(await runRow(runId)).toMatchObject({ status: 'succeeded', synced_count: 5 });
+  });
+
+  it('fails a batch whose key is refused on its very first attempt', async () => {
+    const platform = await startPlatform([{ status: 422, error: 'Key already used.' }]);
+    const { runId } = await audienceWithRun(5);
+    const { deps, sleeps } = workerFor(platform);
+    await processRun(deps, runId);
+
+    expect(sleeps).toEqual([]);
+    expect(await batchRows(runId)).toMatchObject([
+      { status: 'failed', attempts: 1, last_error: 'HTTP 422: Key already used.' },
+    ]);
+  });
+
+  it('leaves out emails the platform would refuse and sends the rest of the batch', async () => {
+    const platform = await startPlatform();
+    const { audienceId, runId, customerIds } = await audienceWithRun(3);
+    await pool.query(`update customers set email = 'not an email' where id = $1`, [customerIds[1]]);
+    const { deps, lines } = workerFor(platform);
+    await processRun(deps, runId);
+
+    expect(platform.stored(String(audienceId))).toEqual([customerIds[0], customerIds[2]]);
+    expect(lines).toContain(`run ${runId} batch 0: members left out for an invalid email: 1`);
+    expect((await runRow(runId)).status).toBe('succeeded');
   });
 
   it('succeeds with all counts at 0 for an audience with no members', async () => {

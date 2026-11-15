@@ -18,7 +18,7 @@ const config: CodegenConfig = {
           Audience: '@agents-review/db/audiences#AudienceRow',
           AudiencePreview: '../context.ts#PreviewParent',
           Member: '@agents-review/db/audience-members#MemberRow',
-          SyncRun: '@agents-review/db/sync-runs#SyncRunRow',
+          SyncRun: '@agents-review/db/sync-runs#SyncRunWithAudience',
         },
       },
     },

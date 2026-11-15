@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
 
+import { IDEMPOTENCY_CONFLICT_STATUS } from '@agents-review/shared/ad-platform';
+
 /**
  * What the fake ad platform does with one request. "fail-after" stores the batch and then
  * answers 500; "drop" closes the connection; "hang" never answers.
@@ -29,20 +31,25 @@ function memberIdsOf(body: unknown): string[] {
 
 /**
  * A stand-in for the ad platform: answers requests from a script (then "ok"), stores members
- * once per id, and replays a known idempotency key without storing again.
+ * once per id, replays a known idempotency key without storing again, and answers 422 when a
+ * known key comes with a different batch.
  */
 export async function startFakePlatform(script: Step[] = []) {
   const requests: FakeRequest[] = [];
   const stored = new Map<string, Set<string>>();
-  const knownKeys = new Set<string>();
+  const knownKeys = new Map<string, string>();
   const hooks: { onRequest?: (request: FakeRequest) => void } = {};
 
-  const store = (request: FakeRequest) => {
-    if (knownKeys.has(request.key)) return;
-    knownKeys.add(request.key);
+  /** Stores the batch once per key; false when the key was used with a different batch. */
+  const store = (request: FakeRequest): boolean => {
+    const batch = JSON.stringify([request.audienceId, request.memberIds]);
+    const known = knownKeys.get(request.key);
+    if (known !== undefined) return known === batch;
+    knownKeys.set(request.key, batch);
     const members = stored.get(request.audienceId) ?? new Set<string>();
     stored.set(request.audienceId, members);
     for (const id of request.memberIds) members.add(id);
+    return true;
   };
 
   const server = createServer((req, res) => {
@@ -62,7 +69,11 @@ export async function startFakePlatform(script: Step[] = []) {
         req.socket.destroy();
         return;
       }
-      if (step === 'ok' || step === 'fail-after') store(request);
+      if ((step === 'ok' || step === 'fail-after') && !store(request)) {
+        res.writeHead(IDEMPOTENCY_CONFLICT_STATUS, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Key already used with a different batch.' }));
+        return;
+      }
       const status = typeof step === 'object' ? step.status : step === 'ok' ? 200 : 500;
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (typeof step === 'object' && step.retryAfter !== undefined) {

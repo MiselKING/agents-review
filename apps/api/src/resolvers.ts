@@ -6,7 +6,6 @@ import {
 import {
   archiveAudience,
   findAudience,
-  findAudienceIncludingArchived,
   insertAudience,
   listAudiences,
   updateAudience,
@@ -161,7 +160,7 @@ export const resolvers: Resolvers = {
           extensions: { code: 'SYNC_IN_PROGRESS' },
         });
       }
-      return started.run;
+      return { ...started.run, audience };
     },
   },
 
@@ -188,11 +187,6 @@ export const resolvers: Resolvers = {
 
   SyncRun: {
     id: (run) => String(run.id),
-    audience: async (run, _args, { db }) => {
-      const audience = await findAudienceIncludingArchived(db, run.audienceId);
-      if (!audience) throw new Error(`Sync run ${run.id} has no audience.`);
-      return audience;
-    },
     status: (run) => SYNC_RUN_STATUSES[run.status],
   },
 

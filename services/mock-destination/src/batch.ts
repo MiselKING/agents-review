@@ -1,11 +1,11 @@
-export const MAX_BATCH_SIZE = 500;
-const MAX_ID_LENGTH = 64;
-const MAX_EMAIL_LENGTH = 254;
+import {
+  isAcceptedEmail,
+  MAX_MEMBER_ID_LENGTH,
+  MAX_MEMBERS_PER_BATCH,
+  type PlatformMember,
+} from '@agents-review/shared/ad-platform';
 
-export interface Member {
-  id: string;
-  email: string;
-}
+export type Member = PlatformMember;
 
 export type BatchResult = { ok: true; members: Member[] } | { ok: false; error: string };
 
@@ -16,14 +16,10 @@ function memberError(raw: unknown, index: number): string | undefined {
   const path = `members[${index}]`;
   if (!isRecord(raw)) return `${path} must be an object with id and email.`;
   const { id, email } = raw;
-  if (typeof id !== 'string' || id.length === 0 || id.length > MAX_ID_LENGTH) {
-    return `${path}.id must be a string of 1 to ${MAX_ID_LENGTH} characters.`;
+  if (typeof id !== 'string' || id.length === 0 || id.length > MAX_MEMBER_ID_LENGTH) {
+    return `${path}.id must be a string of 1 to ${MAX_MEMBER_ID_LENGTH} characters.`;
   }
-  if (
-    typeof email !== 'string' ||
-    email.length > MAX_EMAIL_LENGTH ||
-    !/^[^@\s]+@[^@\s]+$/.test(email)
-  ) {
+  if (typeof email !== 'string' || !isAcceptedEmail(email)) {
     return `${path}.email must be an email address.`;
   }
   return undefined;
@@ -35,10 +31,10 @@ export function parseBatch(body: unknown): BatchResult {
     return { ok: false, error: 'Body must be an object with a members list.' };
   }
   const raw: unknown[] = body.members;
-  if (raw.length === 0 || raw.length > MAX_BATCH_SIZE) {
+  if (raw.length === 0 || raw.length > MAX_MEMBERS_PER_BATCH) {
     return {
       ok: false,
-      error: `members must have 1 to ${MAX_BATCH_SIZE} entries, got ${raw.length}.`,
+      error: `members must have 1 to ${MAX_MEMBERS_PER_BATCH} entries, got ${raw.length}.`,
     };
   }
   const members: Member[] = [];

@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 
 import { listAudienceMemberIds } from './audience-members.ts';
+import type { AudienceRow } from './audiences.ts';
 import type { Queryable } from './client.ts';
 import { audiences, customers, syncBatches, syncRuns } from './schema.ts';
 
@@ -46,19 +47,34 @@ export async function startSyncRun(db: Queryable, audienceId: number): Promise<S
   }
 }
 
-export async function findSyncRun(db: Queryable, id: number): Promise<SyncRunRow | undefined> {
-  const [row] = await db.select().from(syncRuns).where(eq(syncRuns.id, id));
-  return row;
+/** A run with its audience, which may be archived since; loaded in one query. */
+export type SyncRunWithAudience = SyncRunRow & { audience: AudienceRow };
+
+const runsWithAudience = (db: Queryable) =>
+  db
+    .select({ run: syncRuns, audience: audiences })
+    .from(syncRuns)
+    .innerJoin(audiences, eq(audiences.id, syncRuns.audienceId));
+
+const withAudience = ({ run, audience }: { run: SyncRunRow; audience: AudienceRow }) => ({
+  ...run,
+  audience,
+});
+
+export async function findSyncRun(
+  db: Queryable,
+  id: number,
+): Promise<SyncRunWithAudience | undefined> {
+  const [row] = await runsWithAudience(db).where(eq(syncRuns.id, id));
+  return row && withAudience(row);
 }
 
 /** Runs newest first, optionally for one audience, starting after the run id `after`. */
 export async function listSyncRuns(
   db: Queryable,
   page: { audienceId?: number; first: number; after?: number },
-): Promise<{ runs: SyncRunRow[]; hasNextPage: boolean }> {
-  const rows = await db
-    .select()
-    .from(syncRuns)
+): Promise<{ runs: SyncRunWithAudience[]; hasNextPage: boolean }> {
+  const rows = await runsWithAudience(db)
     .where(
       and(
         page.audienceId === undefined ? undefined : eq(syncRuns.audienceId, page.audienceId),
@@ -67,7 +83,10 @@ export async function listSyncRuns(
     )
     .orderBy(desc(syncRuns.id))
     .limit(page.first + 1);
-  return { runs: rows.slice(0, page.first), hasNextPage: rows.length > page.first };
+  return {
+    runs: rows.slice(0, page.first).map(withAudience),
+    hasNextPage: rows.length > page.first,
+  };
 }
 
 /** Queued, or running with a heartbeat older than `staleSeconds` (its worker died). */
