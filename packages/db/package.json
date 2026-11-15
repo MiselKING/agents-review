@@ -8,7 +8,9 @@
     "./audience-members": "./src/audience-members.ts",
     "./audiences": "./src/audiences.ts",
     "./customers": "./src/customers.ts",
-    "./schema": "./src/schema.ts"
+    "./rollback": "./src/rollback.ts",
+    "./schema": "./src/schema.ts",
+    "./sync-runs": "./src/sync-runs.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

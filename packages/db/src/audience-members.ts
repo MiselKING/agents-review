@@ -69,6 +69,20 @@ export function countAudienceMembers(
   return db.$count(customers, audienceFilterSql(filter, now));
 }
 
+/** Every member's customer id, in id order. For snapshots, not for paging. */
+export async function listAudienceMemberIds(
+  db: Queryable,
+  filter: AudienceFilter,
+  now: Date,
+): Promise<number[]> {
+  const rows = await db
+    .select({ id: customers.id })
+    .from(customers)
+    .where(audienceFilterSql(filter, now))
+    .orderBy(asc(customers.id));
+  return rows.map((row) => row.id);
+}
+
 /** One page of members ordered by customer id, starting after the id `after`. */
 export async function listAudienceMembers(
   db: Queryable,

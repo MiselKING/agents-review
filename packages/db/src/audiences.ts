@@ -23,6 +23,15 @@ export async function findAudience(db: Queryable, id: number): Promise<AudienceR
   return row;
 }
 
+/** The audience even if archived, for records that outlive it, like sync runs. */
+export async function findAudienceIncludingArchived(
+  db: Queryable,
+  id: number,
+): Promise<AudienceRow | undefined> {
+  const [row] = await db.select().from(audiences).where(eq(audiences.id, id));
+  return row;
+}
+
 export async function insertAudience(
   db: Queryable,
   values: { name: string; definition: AudienceFilter },
