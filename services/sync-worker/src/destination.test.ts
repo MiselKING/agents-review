@@ -8,10 +8,11 @@ afterEach(async () => {
   await Promise.all(platforms.splice(0).map((platform) => platform.close()));
 });
 
-async function sendOnce(step: Step) {
+// The first request also pays for starting the HTTP client, which can exceed 200 ms on a busy CI runner.
+async function sendOnce(step: Step, timeoutMs = 2_000) {
   const platform = await startFakePlatform([step]);
   platforms.push(platform);
-  const destination = createDestination(platform.url, { timeoutMs: 200 });
+  const destination = createDestination(platform.url, { timeoutMs });
   const outcome = await destination.send('7', 'key-1', [{ id: '1', email: 'ann@example.com' }]);
   return { outcome, platform };
 }
@@ -36,7 +37,7 @@ describe('createDestination', () => {
   });
 
   it('reports no answer in time as worth retrying', async () => {
-    const { outcome } = await sendOnce('hang');
+    const { outcome } = await sendOnce('hang', 200);
     expect(outcome).toEqual({ kind: 'retryable', error: 'No answer within 200 ms.' });
   });
 
