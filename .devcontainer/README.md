@@ -1,10 +1,19 @@
-# Dev container: one-time setup, checks and VS Code
+# Dev container
 
-Start, run, stop and remove are in the [root README](../README.md#dev-container-optional). This page covers what each developer does once per machine, how to check that everything works, and optional VS Code use.
+Use it when Claude should work on its own, without you approving each step, for example a long task or a batch of test runs. Claude then works in a sealed-off container:
+- it sees only a separate copy of the repo, not your working copy or other files;
+- it can only reach GitHub, npm, Anthropic and the VS Code Marketplace;
+- it has only the tokens you paste in, not your own logins.
+
+For everyday development you don't need it, and the normal setup in the [root README](../README.md#run-it) stays as it is.
+
+Works on Windows (WSL 2) + Docker Desktop, macOS (Intel and Apple Silicon) + Docker Desktop, and Linux + Docker Engine. Podman and rootless Docker are untested.
 
 Every command here runs in **a terminal on your computer**: on Windows, the **Ubuntu (WSL)** terminal (not PowerShell, except where noted); on macOS and Linux, your usual terminal.
 
 ## One-time setup
+
+Once per machine, for each developer.
 
 1. **Docker**
    - Windows: install Docker Desktop. In Settings → Resources → WSL integration, turn on Ubuntu. In the Ubuntu terminal, `docker version` must show a Server section.
@@ -35,11 +44,41 @@ Every command here runs in **a terminal on your computer**: on Windows, the **Ub
    - Repository access: Only select repositories → `agents-review`.
    - Permissions: Contents and Pull requests, both Read and write.
 
-Keep both tokens in a password manager. They're never saved on your computer or in the container; you paste them into each new terminal (Start step 2 in the root README). Each developer uses their own.
+Keep both tokens in a password manager. They're never saved on your computer or in the container; you paste them into each new terminal ([Start](#start), step 2). Each developer uses their own.
+
+## Start
+
+1. Once: clone a separate copy. Never use your everyday checkout: its `node_modules` has binaries for your computer, and the agent must not touch your working copy.
+   ```bash
+   git clone https://github.com/MiselKING/agents-review.git ~/agents-review
+   ```
+2. Paste your tokens. They stay in this terminal only and are never saved, so paste them again in each new terminal. Skip the GitHub one if runs don't need to push.
+   ```bash
+   read -rsp "Claude token: " CLAUDE_CODE_OAUTH_TOKEN && export CLAUDE_CODE_OAUTH_TOKEN
+   
+   read -rsp "GitHub token: " GH_TOKEN && export GH_TOKEN
+   ```
+3. Start the container:
+   ```bash
+   devcontainer up --workspace-folder ~/agents-review
+   ```
+   The first start builds the image and sets up the project (about 5 minutes). Later starts take seconds.
+
+## Run Claude
+
+In the same terminal, so it gets the tokens:
+
+```bash
+devcontainer exec --workspace-folder ~/agents-review claude -p "Summarize what apps/api does" --max-turns 10
+```
+
+`-p` runs can run the project checks (`pnpm lint`, `pnpm test` and the others in AGENTS.md) without prompts. Anything that would need your approval is denied.
+
+For a shell inside the container: `devcontainer exec --workspace-folder ~/agents-review bash` (`exit` to leave). Only `devcontainer exec` from a terminal with the tokens passes them in; VS Code terminals don't get them.
 
 ## Check that it works
 
-After **Start** in the root README, in the same terminal, open a shell inside the container:
+After [Start](#start), in the same terminal, open a shell inside the container:
 
 ```bash
 devcontainer exec --workspace-folder ~/agents-review bash
@@ -68,6 +107,27 @@ git switch - && git branch -D test/devcontainer-push
 ```
 
 Type `exit` to leave the container. It keeps running.
+
+## Stop and remove
+
+**Stop:** `docker compose -p agents-review_devcontainer stop`. To start again, do [Start](#start) steps 2 and 3.
+
+**Remove everything:** the containers, the database, the Claude config, the image, then the clone:
+```bash
+docker compose -p agents-review_devcontainer down -v --rmi local
+rm -rf ~/agents-review
+```
+`agents-review_devcontainer` is the clone's folder name plus `_devcontainer`. Change it if your clone has another name.
+
+## Upgrades
+
+Chromium and Claude Code are built into the image. After a Playwright upgrade, set the playwright feature's `version` in `.devcontainer/devcontainer.json` and the Playwright image in `.github/workflows/ci.yml`; for Claude Code, set `CLAUDE_CODE_VERSION` in `.devcontainer/compose.yaml`. Then rebuild: `devcontainer up --workspace-folder ~/agents-review --remove-existing-container`.
+
+## Risks
+
+- Anything inside can leave through the allowed hosts, e.g. by pushing to GitHub.
+- The firewall looks up the allowed hosts' IPs only at startup. If one changes its IPs, restart the container.
+- VS Code, while connected, passes your own Git login into the container. See [VS Code](#vs-code-optional) before using it.
 
 ## VS Code (optional)
 
@@ -104,7 +164,7 @@ The same container, but on GitHub's machines instead of yours, opened in the bro
 
 ## If something fails
 
-- **A token length is 0:** that terminal doesn't have the tokens, or you opened the shell another way (VS Code, `docker exec`). Paste them again (root README, Start step 2) and use `devcontainer exec`.
+- **A token length is 0:** that terminal doesn't have the tokens, or you opened the shell another way (VS Code, `docker exec`). Paste them again ([Start](#start), step 2) and use `devcontainer exec`.
 - **`devcontainer exec` says "Dev container not found"** while the container runs: VS Code created it from a Windows path. Recreate it from the Ubuntu terminal (your database and Claude config are kept):
   ```bash
   docker compose -p agents-review_devcontainer down
@@ -112,4 +172,4 @@ The same container, but on GitHub's machines instead of yours, opened in the bro
   ```
 - **`git commit` says "Please tell me who you are":** run the `git config user.name …` line above inside the container.
 - **A website or extension is blocked:** the allowed hosts are in `.devcontainer/init-firewall.sh`.
-- **Start fails or something is broken:** remove everything (root README) and start again.
+- **Start fails or something is broken:** [remove everything](#stop-and-remove) and start again.

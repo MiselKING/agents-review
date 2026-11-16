@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  poem: false
+  sequence_diagrams: false
+  auto_review:
+    enabled: true
+    drafts: false
+  # Exclusions only: an include pattern would limit the review to matching files.
+  path_filters:
+    - '!apps/api/src/generated/**'
+    - '!apps/web/src/gql/**'
+    - '!packages/db/drizzle/**'
+    - '!pnpm-lock.yaml'
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    # Added to the defaults, which already include every AGENTS.md and CLAUDE.md.
+    filePatterns:
+      - REVIEW.md

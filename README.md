@@ -4,6 +4,8 @@ Repo: `agents-review` (public). Project name may change.
 
 A test project to learn how to build software with AI agents. Agents do most of the development; I act as tech lead: I write issues, set the rules, review and merge. The app itself is small on purpose. The point is the agent setup around it.
 
+**Status:** Phase 4 of 8, GitHub automation ([build plan](docs/_project-plan.md#build-plan)). 4 of 6 app features are built; the member table and run history page are next.
+
 Full plan: [docs/_project-plan.md](docs/_project-plan.md). This README is the short version.
 
 ## What the app does
@@ -13,6 +15,8 @@ A small audience sync tool:
 - A run history page shows each sync with status, counts and errors.
 
 ## Architecture
+![The web app calls the GraphQL API, which reads and writes Postgres. The sync worker reads audiences from Postgres, records its runs there, and sends members to the mock ad platform.](docs/app_architecture.png)
+
 One monorepo (pnpm workspaces + Turborepo) with 6 packages today and a 7th planned:
 - `apps/web`: React app (audience builder, member table, run history)
 - `apps/api`: GraphQL API (schema-first)
@@ -60,68 +64,21 @@ View the data: `pnpm --filter ./packages/db exec drizzle-kit studio`, then open 
 Stop: `Ctrl+C`, then `docker compose stop`. Tests and other commands are in [AGENTS.md](AGENTS.md#commands).
 
 ## Dev container (optional)
-Use it when Claude should work on its own, without you approving each step, for example a long task or a batch of test runs. Claude then works in a sealed-off container:
-- it sees only a separate copy of the repo, not your working copy or other files;
-- it can only reach GitHub, npm, Anthropic and the VS Code Marketplace;
-- it has only the tokens you paste in, not your own logins.
+Use it when Claude should work on its own, without you approving each step, for example a long task or a batch of test runs. Claude then works in a sealed-off container with a firewall and only the tokens you paste in. For everyday development you don't need it.
 
-For everyday development you don't need it, and the normal setup above stays as it is.
-
-Works on Windows (WSL 2) + Docker Desktop, macOS (Intel and Apple Silicon) + Docker Desktop, and Linux + Docker Engine. Podman and rootless Docker are untested.
-
-**First time on a machine?** Do the one-time setup in [.devcontainer/README.md](.devcontainer/README.md): Docker, the devcontainer CLI, and your tokens.
-
-All commands below run in **a terminal on your computer**: on Windows, the **Ubuntu (WSL)** terminal, not PowerShell; on macOS and Linux, your usual terminal.
-
-**Start**
-1. Once: clone a separate copy. Never use your everyday checkout: its `node_modules` has binaries for your computer, and the agent must not touch your working copy.
-   ```bash
-   git clone https://github.com/MiselKING/agents-review.git ~/agents-review
-   ```
-2. Paste your tokens. They stay in this terminal only and are never saved, so paste them again in each new terminal. Skip the GitHub one if runs don't need to push.
-   ```bash
-   read -rsp "Claude token: " CLAUDE_CODE_OAUTH_TOKEN && export CLAUDE_CODE_OAUTH_TOKEN
-   
-   read -rsp "GitHub token: " GH_TOKEN && export GH_TOKEN
-   ```
-3. Start the container:
-   ```bash
-   devcontainer up --workspace-folder ~/agents-review
-   ```
-   The first start builds the image and sets up the project (about 5 minutes). Later starts take seconds.
-
-**Run Claude** (same terminal, so it gets the tokens):
-```bash
-devcontainer exec --workspace-folder ~/agents-review claude -p "Summarize what apps/api does" --max-turns 10
-```
-`-p` runs can run the project checks (`pnpm lint`, `pnpm test` and the others in AGENTS.md) without prompts. Anything that would need your approval is denied.
-For a shell inside the container: `devcontainer exec --workspace-folder ~/agents-review bash` (`exit` to leave). Only `devcontainer exec` from a terminal with the tokens passes them in; VS Code terminals don't get them.
-
-**Stop:** `docker compose -p agents-review_devcontainer stop`. To start again, do steps 2 and 3.
-
-**Remove everything:** the containers, the database, the Claude config, the image, then the clone:
-```bash
-docker compose -p agents-review_devcontainer down -v --rmi local
-rm -rf ~/agents-review
-```
-`agents-review_devcontainer` is the clone's folder name plus `_devcontainer`. Change it if your clone has another name.
-
-**Upgrades:** Chromium and Claude Code are built into the image. After a Playwright upgrade, set the playwright feature's `version` in `.devcontainer/devcontainer.json` and the Playwright image in `.github/workflows/ci.yml`; for Claude Code, set `CLAUDE_CODE_VERSION` in `.devcontainer/compose.yaml`. Then rebuild: `devcontainer up --workspace-folder ~/agents-review --remove-existing-container`.
-
-**Risks**
-- Anything inside can leave through the allowed hosts, e.g. by pushing to GitHub.
-- The firewall looks up the allowed hosts' IPs only at startup. If one changes its IPs, restart the container.
-- VS Code, while connected, passes your own Git login into the container. See [.devcontainer/README.md](.devcontainer/README.md#vs-code-optional) before using it.
+Setup, start, run, stop and risks: [.devcontainer/README.md](.devcontainer/README.md).
 
 ## The agent setup
 Flow: issue → agent builds on a branch → draft PR → CI → AI review → my review → merge. Agents never merge. Failed CI or requested changes go back to the agent.
-- Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (comparison, 30-day Pro trial)
+
+![An issue labelled agent goes to an agent that builds on a CI runner and opens a draft PR. CI checks run; red CI goes back to a fix agent, green goes to AI review by Claude and CodeRabbit, then my review, then merge. Requested changes go back to the agent.](docs/agent_pr_loop.png)
+- Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (optional comparison, one month of Copilot Pro)
 - Reviewers: Claude, CodeRabbit, Copilot code review (about 5 PRs)
 - Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills, hooks in `.claude/hooks/` (lint after each edit, lint and typecheck before Claude finishes), `.mcp.json`, dev container with a default-deny firewall, where agents can't edit agent config. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
 - Writing issues: the issue forms on GitHub, or `/write-issue` in Claude Code with short notes (format in `.claude/skills/write-issue/SKILL.md`)
 - Side flows: Renovate dependency PRs, weekly docs sync, visual change requests
 - Measurement: 12 fixed tasks, run with a bare setup (Phase 4) and the full setup (Phase 7), 2 runs each
-- All tools free on a public repo. The only licensed extra is the Copilot Pro trial.
+- All tools free on a public repo. The only paid extra is the optional Copilot comparison: one month of Copilot Pro ($10).
 
 ## Decisions
 - Compose runs Postgres only; `pnpm dev` runs the apps and services

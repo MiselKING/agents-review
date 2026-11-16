@@ -1,0 +1,71 @@
+name: Claude
+
+# Runs whenever an issue comment, PR comment or PR review mentions `@claude`.
+#
+# Your comment is the task: Claude works out what to do from what you wrote.
+# It also reads the issue or PR (title, description, earlier comments, diff),
+# so you don't need to repeat them.
+#
+# The appended system prompt (at the bottom) adds two rules to every run:
+# - `@claude plan` gets a plan only: no edits, no branch, no commit.
+#   You approve the plan by adding the `agent` label (claude-agent.yml).
+# - This runner has no Postgres or browsers, so database and e2e tests are left to CI.
+on:
+  # A new comment on an issue, or in a PR's Conversation tab.
+  issue_comment:
+    types: [created]
+  # A new comment on a line in a PR's Files changed tab.
+  pull_request_review_comment:
+    types: [created]
+  # A submitted PR review; its summary text can mention @claude.
+  pull_request_review:
+    types: [submitted]
+
+permissions: {}
+
+# One run at a time per issue or PR; a second comment waits for the first run.
+concurrency:
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  claude:
+    # The action itself also refuses users without write access, and bots.
+    if: >-
+      ${{
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
+      }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      # The action trades this for the Claude GitHub App token it pushes with.
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 2
+        with:
+          fetch-depth: 1
+      # The hooks in .claude/settings.json and the project checks need Node and node_modules.
+      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
+        timeout-minutes: 5
+        with:
+          cache: true
+          save-cache: false
+          require-lockfile: true
+      # No `github_token` input: pushes made with GITHUB_TOKEN don't start CI.
+      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
+            --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
+            --append-system-prompt "If the comment that triggered you starts with @claude plan, reply with an implementation plan only: the files you would change, the order of steps, the tests you would add, and open questions. Do not edit files, create a branch or commit. Otherwise do what the comment asks. This runner has no Postgres and no Playwright browsers: run lint, typecheck and unit tests, and leave database and e2e tests to CI."
