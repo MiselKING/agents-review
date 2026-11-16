@@ -1,37 +1,67 @@
-name: Claude review
+name: Review
 
-# A PR leaves draft (pr-ready.yml does that once CI passes): Claude reviews it against REVIEW.md.
+# On every push to a ready (non-draft) PR, once CI passes: Claude reviews it, then CodeRabbit is asked to.
+# Drafts wait: pr-ready.yml marks a draft ready after its CI passes, and that starts this workflow.
 on:
   pull_request:
-    types: [ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 permissions: {}
 
+# A newer push replaces a review that is still waiting or running.
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
+  group: review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   review:
-    # Fork PRs get no secrets, so the review can't run for them.
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    # Fork PRs get no secrets, so the reviews can't run for them.
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 50
     permissions:
       contents: read
       # Write, or the review finishes without posting.
       pull-requests: write
       issues: read
+      checks: read
       # The action trades this for the Claude GitHub App token it comments with.
       id-token: write
     steps:
+      # CI runs in parallel; this waits for its `ci` check on the same commit.
+      - name: Wait for CI to pass
+        id: ci
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          while true; do
+            result=$(gh api "repos/$REPO/commits/$SHA/check-runs?check_name=ci" \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")] | sort_by(.id) | last
+                    | if . == null then "waiting" else "\(.status) \(.conclusion)" end')
+            case "$result" in
+              "completed success")
+                echo "passed=true" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+              completed*)
+                echo "CI did not pass ($result), so no review."
+                exit 0
+                ;;
+            esac
+            sleep 20
+          done
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ steps.ci.outputs.passed == 'true' }}
         timeout-minutes: 2
         with:
           fetch-depth: 1
       # A PR must not change the rules it is reviewed by, so they come from the base branch.
       # The action already does this for CLAUDE.md, .claude/ and .mcp.json, but not these.
       - name: Restore REVIEW.md and every AGENTS.md from the base branch
+        if: ${{ steps.ci.outputs.passed == 'true' }}
         timeout-minutes: 2
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -42,23 +72,29 @@ jobs:
           git ls-tree -r -z --name-only "origin/$BASE_REF" | grep -zE "$rules" | xargs -0 -r git checkout "origin/$BASE_REF" --
       # No `github_token` input: the action comments as the Claude GitHub App.
       - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
+        if: ${{ steps.ci.outputs.passed == 'true' }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # `@claude fix ...` pushes as claude[bot], and the action refuses bots not listed here.
+          allowed_bots: 'claude[bot]'
           # The stop hook runs lint and typecheck; a review installs nothing and changes nothing.
           settings: '{"disableAllHooks": true}'
           prompt: |
             Review pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}.
 
             1. Read REVIEW.md in the repo root and follow it exactly. It is the review policy.
-            2. Read the PR with `gh pr view` and `gh pr diff`, and the issue it closes with
-               `gh issue view`, for the acceptance criteria. The PR's code is checked out, so
-               read the surrounding files where the diff alone isn't enough.
-            3. Before posting, check each finding again against the code. Drop it unless you
+            2. Read the PR with `gh pr view --comments` and `gh pr diff`, and the issue it closes
+               with `gh issue view`, for the acceptance criteria. The PR's code is checked out,
+               so read the surrounding files where the diff alone isn't enough.
+            3. If you reviewed this PR before (earlier comments by claude[bot]), this is a
+               re-review after new commits. Don't repeat findings you already posted. Say which
+               earlier Important findings are now fixed and which are still open.
+            4. Before posting, check each finding again against the code. Drop it unless you
                can confirm it is real and that this PR introduced it; problems that already
                exist on the base branch are not findings.
-            4. Put each Important finding on its line with
+            5. Put each new Important finding on its line with
                `mcp__github_inline_comment__create_inline_comment` (with `confirmed: true`).
-            5. Post one summary comment with `gh pr comment`:
+            6. Post one summary comment with `gh pr comment`:
                - a verdict line: `Ready to merge` or `Needs changes`;
                - the issue's acceptance criteria as a checklist, each marked met or not met;
                - the findings, Important first. For each: file and line, what is wrong, why it
@@ -72,3 +108,14 @@ jobs:
             --max-turns 25
             --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*)"
             --disallowedTools "Edit,Write,NotebookEdit"
+      # CodeRabbit can't wait for CI itself, so its automatic reviews are off in .coderabbit.yaml.
+      # Posted with your token: CodeRabbit's docs don't say whether it takes commands from bots.
+      # Last, and even if the Claude review failed, so neither review can block the other.
+      - name: Ask CodeRabbit to review
+        if: ${{ !cancelled() && steps.ci.outputs.passed == 'true' }}
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR" --repo "$REPO" --body '@coderabbitai review'
