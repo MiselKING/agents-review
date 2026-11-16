@@ -79,14 +79,15 @@ async function startPlatform(script: Step[] = []) {
   return platform;
 }
 
-function workerFor(platform: FakePlatform) {
+// Only tests where the platform hangs need a short deadline; a busy CI runner can be slower than one.
+function workerFor(platform: FakePlatform, timeoutMs = 2_000) {
   const sleeps: number[] = [];
   const lines: string[] = [];
   const controller = new AbortController();
   const deps: WorkerDeps = {
     db,
-    destination: createDestination(platform.url, { timeoutMs: 300 }),
-    policy: { ...DEFAULT_POLICY, batchSize: BATCH_SIZE, requestTimeoutMs: 300 },
+    destination: createDestination(platform.url, { timeoutMs }),
+    policy: { ...DEFAULT_POLICY, batchSize: BATCH_SIZE, requestTimeoutMs: timeoutMs },
     sleep: (ms) => {
       sleeps.push(ms);
       return Promise.resolve();
@@ -167,7 +168,7 @@ describe('processRun', () => {
   it('retries server errors, timeouts and network errors with the same key and growing waits', async () => {
     const platform = await startPlatform(['fail-before', 'fail-after', 'drop', 'hang', 'ok']);
     const { audienceId, runId, customerIds } = await audienceWithRun(40);
-    const { deps, sleeps } = workerFor(platform);
+    const { deps, sleeps } = workerFor(platform, 300);
 
     await processRun(deps, runId);
 
@@ -411,7 +412,7 @@ describe('processRun', () => {
       `update sync_runs set heartbeat_at = now() - interval '30 seconds' where id = $1`,
       [runId],
     );
-    const { deps } = workerFor(platform);
+    const { deps } = workerFor(platform, 300);
     deps.policy = { ...deps.policy, heartbeatMs: 50 };
     const heartbeat = async () =>
       firstRow(
@@ -437,7 +438,7 @@ describe('processRun', () => {
     const { runId } = await audienceWithRun(10);
     // Snapshot first, so from here on only heartbeats write to the run's row.
     await snapshotSyncRun(db, runId, BATCH_SIZE, new Date());
-    const { deps, controller } = workerFor(platform);
+    const { deps, controller } = workerFor(platform, 300);
     deps.policy = { ...deps.policy, heartbeatMs: 50 };
     platform.hooks.onRequest = () => controller.abort();
     const heartbeatAt = async () =>
