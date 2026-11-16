@@ -18,7 +18,8 @@ jobs:
     # Fork PRs get no secrets, so the reviews can't run for them.
     if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 50
+    # Above the sum of the step timeouts (30 + 2 + 2 + 20 + 2), so no step is cut off by the job.
+    timeout-minutes: 60
     permissions:
       contents: read
       # Write, or the review finishes without posting.
@@ -73,6 +74,8 @@ jobs:
       # No `github_token` input: the action comments as the Claude GitHub App.
       - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
         if: ${{ steps.ci.outputs.passed == 'true' }}
+        # A stalled review fails here, not at the job timeout, so the CodeRabbit step still runs.
+        timeout-minutes: 20
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # `@claude fix ...` pushes as claude[bot], and the action refuses bots not listed here.
