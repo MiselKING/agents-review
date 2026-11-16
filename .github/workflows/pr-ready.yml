@@ -1,6 +1,6 @@
 name: PR ready
 
-# CI passed on a draft PR: mark it ready for review, which starts claude-review.yml.
+# CI passed on a draft PR: mark it ready for review, which starts the reviews (claude-review.yml).
 on:
   workflow_run:
     workflows: [CI]
