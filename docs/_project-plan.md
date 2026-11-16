@@ -120,8 +120,8 @@ Both loops send work back to an agent, not to you. You see a PR once CI is green
 | 1 | Issue opened | Claude labels it and asks for missing acceptance criteria | Draft it with `write-issue`; answer questions |
 | 2 | You add the `agent` label. For features, comment `@claude plan` first | Claude posts a plan (features), then builds from the approved plan, runs tests and pushes; a workflow step opens the draft PR | Features: read the plan, correct it in a comment, then add the label to approve |
 | 3 | CI fails | Claude reads the failed log and pushes one fix | Take over if it fails again |
-| 4 | CI passes | A workflow marks the PR ready; Claude reviews it against REVIEW.md, and runs a security review if sensitive paths changed | Comment `@coderabbitai review`; read the reviews |
-| 5 | You comment `@claude fix comments...` | Claude commits the requested changes to the same branch | Review and ask for changes |
+| 4 | CI passes on the draft PR | A workflow marks the PR ready, which starts Claude's review against REVIEW.md, and a security review if sensitive paths changed | Comment `@coderabbitai review`; read the reviews |
+| 5 | You comment `@claude fix comments...` | Claude commits the requested changes to the same branch | Review and ask for changes. For another automatic review, put the PR back to draft (`gh pr ready <n> --undo`); the next green CI marks it ready again |
 | 6 | You're done reviewing | — | Merge through your approval bypass (the PR is opened under your account, so you can't approve it). CI must be green |
 
 **Side flows** (each joins the main flow at step 3)
@@ -140,7 +140,8 @@ Both loops send work back to an agent, not to you. You see a PR once CI is green
 
 - **Token:** don't pass `github_token: ${{ secrets.GITHUB_TOKEN }}` to the Claude Code Action. Without it the action pushes as the Claude GitHub App and CI runs on its commits; pushes made with `GITHUB_TOKEN` don't trigger workflows.
 - **Opening the PR:** by default the action pushes a branch and posts a link. To open the draft PR automatically, use a workflow step with a fine-grained personal token. A PR opened with `GITHUB_TOKEN` waits for you to click "Approve workflows to run".
-- **Bots:** the action refuses runs started by bots unless they're in `allowed_bots`. The CI-fix and review workflows run on `workflow_run`, whose actor is whoever pushed, so list `claude[bot]` and `renovate[bot]`. That removes the built-in loop guard: the CI-fix workflow must check for its own earlier fix commit.
+- **Bots:** the action refuses runs started by bots unless they're in `allowed_bots`. The CI-fix workflow runs on `workflow_run`, whose actor is whoever pushed, so list `claude[bot]` and `renovate[bot]`. That removes the built-in loop guard: the CI-fix workflow must check for its own earlier fix commit.
+- **Review trigger:** run the Claude review on `pull_request: ready_for_review`, not on `workflow_run`. On `workflow_run` the action has no PR, so it can't post inline comments, and checking out PR code there runs it with the base branch's permissions. A separate `workflow_run` job marks the draft ready after CI passes, with the personal token: an event caused by `GITHUB_TOKEN` starts no workflow. The review's actor is then you, so it needs no `allowed_bots`.
 - **Review permissions:** the generated review workflow has shipped with `pull-requests: read`, so reviews finished without posting. It needs write.
 - **Review rules:** on PRs the action restores `CLAUDE.md`, `.claude/` and `.mcp.json` from the base branch, but not AGENTS.md or REVIEW.md. Add a step that restores REVIEW.md and every AGENTS.md before the Claude review.
 - **Plan gate:** the label-triggered run must build from the approved plan. Tell it in the prompt to read the issue's comments, and confirm on one feature that it does.
@@ -185,7 +186,7 @@ Repo-wide PR settings (**Settings → General → Pull Requests**):
 - **Scoped credentials.** A fine-grained GitHub token limited to this repo, read-only where possible. Secrets live only in GitHub Actions secrets, never in the container image. Treat the Claude OAuth token like a password.
 - **Public logs.** Actions logs on a public repo are public. Leave the action's `show_full_output` off.
 - **Isolation.** Skip permission prompts only inside the dev container, as a non-root user. In CI, use an exact tool allowlist, and pass the same deny rules for agent config with `--disallowedTools`.
-- **Cost and loop limits.** `--max-turns` on every headless run, at most one automatic CI-fix attempt and two automatic reviews per PR.
+- **Cost and loop limits.** `--max-turns` on every headless run, at most one automatic CI-fix attempt per PR, and one automatic review each time a PR leaves draft.
 
 ## Tools and cost
 
@@ -244,10 +245,11 @@ Four of the six product features. The other two, member table and run history pa
 
 **Phase 4: GitHub automation**
 
-- [ ] **You:** install the Claude GitHub app, run `claude setup-token`, store the token as a repo secret.
-- [ ] **Agent drafts, you review:** Claude Code Action workflows: `@claude`, the `agent` label to a draft PR, review after CI passes. Work through the setup traps.
-- [ ] **You:** write REVIEW.md by hand. **Agent:** the step that restores REVIEW.md and every AGENTS.md before the Claude review.
-- [ ] **You:** install CodeRabbit. **Agent:** `.coderabbit.yaml` with REVIEW.md as a guideline file.
+- ✅ **You:** install the Claude GitHub app, run `claude setup-token`, store the token as a repo secret (Repository -> Settings -> Secrets and variables -> Actions -> New secret).
+- ✅ **You:** create fine-grained personal token for this repo (permissions: contents write and pull requests write) and store as second secret.
+- ✅ **Agent drafts, you review:** Claude Code Action workflows: `@claude`, the `agent` label to a draft PR, review after CI passes. Work through the setup traps.
+- ✅ **You:** write REVIEW.md by hand. **Agent:** the step that restores REVIEW.md and every AGENTS.md before the Claude review.
+- ✅ **You:** install CodeRabbit (on their page, log in with GitHub and pick the repository). For repos with fewer than 10 stars, start each review by hand with the comment `@coderabbitai review`. **Agent:** `.coderabbit.yaml` with REVIEW.md as a guideline file.
 - [ ] **You:** write the last 2 issues with `write-issue`: member table, run history page. The run history issue also adds the "Sync now" button, which the sync worker issue left out on purpose.
 - [ ] **Agent, through the main flow:** member table first, then run history page, one at a time. This is the plan-gate test: comment `@claude plan`, correct the plan, add the `agent` label, and confirm the build follows the approved plan. The CI-fix agent arrives in Phase 5, so when CI fails, comment `@claude` with the failure.
 - [ ] **You:** read the reviews and merge both. Fix the workflows, not the feature PR, when the automation is what failed.
