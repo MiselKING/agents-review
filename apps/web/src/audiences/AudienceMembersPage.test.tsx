@@ -178,7 +178,7 @@ describe('AudienceMembersPage', () => {
     expect(within(alert).getByText('The members could not be loaded.')).toBeInTheDocument();
   });
 
-  it('shows a loading state first', () => {
+  it('first shows a loading state', () => {
     mockGraphql({});
     renderPage();
     expect(screen.getByText('Loading members…')).toBeInTheDocument();
