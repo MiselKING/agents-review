@@ -62,7 +62,9 @@ jobs:
 
             If the work needs something AGENTS.md lists under "Ask first", don't do it; stop
             and explain in your comment why it's needed.
+          # Opus wrote the plan; Sonnet builds from it. A full model ID, so it changes only here.
           claude_args: |
+            --model claude-sonnet-5-5
             --max-turns 60
             --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
             --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"

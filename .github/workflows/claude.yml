@@ -64,7 +64,9 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
+          # Opus plans, Sonnet does the rest. Full model IDs, so a model changes only when this file does.
           claude_args: |
+            --model ${{ startsWith(github.event.comment.body, '@claude plan') && 'claude-opus-5-5' || 'claude-sonnet-5-5' }}
             --max-turns 40
             --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
             --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
