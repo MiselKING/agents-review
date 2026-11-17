@@ -1,6 +1,16 @@
 import { expect, test } from '@playwright/test';
 
-import { createAudience, uniqueName } from './helpers';
+import {
+  archiveCreatedAudiences,
+  created,
+  createAudience,
+  idOfAudienceNamed,
+  uniqueName,
+} from './helpers';
+
+test.afterEach(async ({ request }) => {
+  await archiveCreatedAudiences(request);
+});
 
 test('creates an audience from the builder', async ({ page }) => {
   const name = uniqueName('create');
@@ -23,6 +33,7 @@ test('creates an audience from the builder', async ({ page }) => {
 
   await expect(page).toHaveURL('/');
   await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
+  created.push(await idOfAudienceNamed(page, name));
 });
 
 test('edits an audience', async ({ page, request }) => {
