@@ -26,8 +26,8 @@ jobs:
     # Fork PRs get no secrets, so the reviews can't run for them.
     if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-26.04
-    # Above the sum of the step timeouts (30 + 2 + 2 + 20 + 2), so no step is cut off by the job.
-    timeout-minutes: 60
+    # Above the sum of the step timeouts (30 + 2 + 2 + 2 + 2 + 20 + 2), so no step is cut off by the job.
+    timeout-minutes: 65
     permissions:
       contents: read
       # Write, or the review finishes without posting.
@@ -81,9 +81,42 @@ jobs:
           git fetch --depth=1 origin "$BASE_REF"
           git ls-files -z | grep -zE "$rules" | xargs -0 -r rm -f --
           git ls-tree -r -z --name-only "origin/$BASE_REF" | grep -zE "$rules" | xargs -0 -r git checkout "origin/$BASE_REF" --
+      # The action gets no app token for a workflow file that differs from the default branch, and then
+      # skips itself without failing. Skip it on purpose instead, so the run and the PR say why.
+      - name: Check this workflow matches the default branch
+        id: workflow
+        if: ${{ steps.ci.outputs.passed == 'true' }}
+        timeout-minutes: 2
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          file=.github/workflows/claude-review.yml
+          git fetch --depth=1 origin "$DEFAULT_BRANCH"
+          if git diff --quiet FETCH_HEAD -- "$file"; then
+            echo "same=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "same=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No Claude review: this PR changes $file, which only runs as it is on $DEFAULT_BRANCH."
+          fi
+      # GITHUB_TOKEN, so the comment starts no workflow. Posted once per PR.
+      - name: Say on the PR why Claude didn't review
+        if: ${{ steps.workflow.outputs.same == 'false' }}
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- claude-review-skipped -->'
+          if gh pr view "$PR" --repo "$REPO" --json comments --jq '.comments[].body' | grep -qF "$marker"; then
+            echo "#$PR already has this comment."
+            exit 0
+          fi
+          gh pr comment "$PR" --repo "$REPO" --body "$marker
+          **No Claude review on this PR.** It changes \`.github/workflows/claude-review.yml\`, and Claude's workflows only run as they are on the default branch. CodeRabbit still reviews it; review the workflow change yourself."
       # No `github_token` input: the action comments as the Claude GitHub App.
       - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
-        if: ${{ steps.ci.outputs.passed == 'true' }}
+        if: ${{ steps.ci.outputs.passed == 'true' && steps.workflow.outputs.same == 'true' }}
         # A stalled review fails here, not at the job timeout, so the CodeRabbit step still runs.
         timeout-minutes: 20
         with:
