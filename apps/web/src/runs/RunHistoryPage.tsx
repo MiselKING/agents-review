@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import type { SyncRunStatus } from '../gql/graphql';
 import { ButtonLink } from '../ui/Button';
 import { Pager } from '../ui/Pager';
-import { ErrorState, LoadingState } from '../ui/states';
+import { ErrorState, LoadingState, RefreshFailedNote, TryAgainButton } from '../ui/states';
 import { RUNS_PAGE_SIZE, useSyncRuns } from './api';
 import { formatDateTime, formatDuration, isFinished, statusLabel } from './format';
 
@@ -38,8 +38,30 @@ export function RunHistoryPage() {
   let content: React.ReactNode;
   if (runs.isPending) {
     content = <LoadingState label="Loading runs…" />;
-  } else if (runs.isError) {
-    content = <ErrorState title="Runs could not be loaded." error={runs.error} />;
+  } else if (runs.data === undefined) {
+    const retry = <TryAgainButton onClick={() => void runs.refetch()} />;
+    if (pageIndex === 0) {
+      content = <ErrorState title="Runs could not be loaded." error={runs.error} action={retry} />;
+    } else {
+      const first = pageIndex * RUNS_PAGE_SIZE + 1;
+      const last = first + RUNS_PAGE_SIZE - 1;
+      content = (
+        <>
+          <ErrorState
+            title={`Runs ${first.toLocaleString('en')}–${last.toLocaleString('en')} couldn't be loaded.`}
+            error={runs.error}
+            action={retry}
+          />
+          <Pager
+            rangeLabel=""
+            hasPrevious
+            hasNext={false}
+            onPrevious={() => setCursors((list) => list.slice(0, -1))}
+            onNext={() => undefined}
+          />
+        </>
+      );
+    }
   } else {
     const { nodes, pageInfo } = runs.data;
     const isUpdating = runs.isPlaceholderData;
@@ -62,6 +84,13 @@ export function RunHistoryPage() {
         </div>
       ) : (
         <>
+          {runs.isError ? (
+            <RefreshFailedNote
+              what="runs"
+              updatedAt={runs.dataUpdatedAt}
+              onRetry={() => void runs.refetch()}
+            />
+          ) : null}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <table
               aria-busy={isUpdating}

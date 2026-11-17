@@ -48,9 +48,10 @@ export function mockGraphql(handlers: Record<string, Handler>) {
 
 export function renderWithProviders(ui: ReactNode, initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialEntry]}>{ui}</MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...result, queryClient };
 }

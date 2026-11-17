@@ -3,7 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SyncRunStatus } from '../gql/graphql';
-import { mockGraphql, renderWithProviders } from '../test/render';
+import { MockGraphqlErrors, mockGraphql, renderWithProviders } from '../test/render';
+import { formatDateTime } from './format';
 import { RunHistoryPage } from './RunHistoryPage';
 
 afterEach(() => {
@@ -58,7 +59,7 @@ describe('RunHistoryPage', () => {
       .getAllByRole('cell')
       .map((cell) => cell.textContent);
     expect(cells.slice(2, 5)).toEqual(['1,200', '1,150', '50']);
-    expect(cells[5]).toContain('Nov 14, 2026');
+    expect(cells[5]).toContain(formatDateTime('2026-11-14T10:00:00.000Z'));
     expect(cells[6]).toBe('3 min 5 s');
     expect(screen.getByRole('link', { name: 'Recent buyers' })).toHaveAttribute(
       'href',
@@ -84,7 +85,7 @@ describe('RunHistoryPage', () => {
     const cells = within(await rowOf('Recent buyers')).getAllByRole('cell');
     expect([2, 3, 4, 6].map((index) => cells[index]?.textContent)).toEqual(['—', '—', '—', '—']);
     // A queued run shows when it was created.
-    expect(cells[5]).toHaveTextContent('Nov 14, 2026');
+    expect(cells[5]).toHaveTextContent(formatDateTime('2026-11-14T09:59:00.000Z'));
   });
 
   it('shows the members but — for the rest while a run is running', async () => {
@@ -165,5 +166,68 @@ describe('RunHistoryPage', () => {
     );
     renderWithProviders(<RunHistoryPage />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Runs could not be loaded.');
+  });
+
+  it('recovers from a failed first load with Try again', async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    mockGraphql({
+      SyncRuns: () => {
+        calls += 1;
+        return calls === 1 ? new MockGraphqlErrors({ message: 'Database is down' }) : page([run()]);
+      },
+    });
+    renderWithProviders(<RunHistoryPage />);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Runs could not be loaded.');
+    expect(alert).toHaveTextContent('Database is down');
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('link', { name: 'Recent buyers' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps Previous when a later page fails, and Previous returns to page 1', async () => {
+    const user = userEvent.setup();
+    mockGraphql({
+      SyncRuns: (variables) =>
+        variables.after === 'c1'
+          ? new MockGraphqlErrors({ message: 'Database is down' })
+          : page([run({ id: '1', audience: { id: '1', name: 'First page' } })], true, 'c1'),
+    });
+    renderWithProviders(<RunHistoryPage />);
+    await user.click(await screen.findByRole('button', { name: 'Next' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("Runs 26–50 couldn't be loaded.");
+    expect(alert).toHaveTextContent('Database is down');
+    expect(screen.getByRole('heading', { name: 'Run history', level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(await screen.findByRole('link', { name: 'First page' })).toBeInTheDocument();
+  });
+
+  it('keeps the table and notes it when a refresh fails', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let calls = 0;
+    mockGraphql({
+      SyncRuns: () => {
+        calls += 1;
+        if (calls === 2) return new MockGraphqlErrors({ message: 'Database is down' });
+        return page([run({ status: calls === 1 ? 'RUNNING' : 'SUCCEEDED' })]);
+      },
+    });
+    renderWithProviders(<RunHistoryPage />);
+    expect(await screen.findByText('Running')).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    const note = await screen.findByRole('status');
+    expect(note).toHaveTextContent(/Couldn't refresh\. Showing runs as of \d{2}:\d{2}\./);
+    expect(within(note).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Recent buyers' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    // Polling continues, and the note goes once a refresh works.
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(await screen.findByText('Succeeded')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

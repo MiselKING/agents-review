@@ -3,7 +3,13 @@ import { useParams } from 'react-router';
 
 import { ButtonLink } from '../ui/Button';
 import { Pager } from '../ui/Pager';
-import { ErrorState, LoadingState, PageMessage } from '../ui/states';
+import {
+  ErrorState,
+  LoadingState,
+  PageMessage,
+  RefreshFailedNote,
+  TryAgainButton,
+} from '../ui/states';
 import {
   countryLabel,
   MEMBERS_PAGE_SIZE,
@@ -25,16 +31,26 @@ function MembersView({ id }: { id: string }) {
   const summary = useAudienceSummary(id);
   const members = useAudienceMembers(id, cursors[pageIndex] ?? null);
   const countries = useCountries();
+  const goBack = () => setCursors((list) => list.slice(0, -1));
 
-  if (summary.isPending || (members.isPending && !summary.isError)) {
-    return <LoadingState label="Loading members…" />;
-  }
-  if (summary.isError || members.isError) {
+  if (summary.isError && summary.data === undefined) {
+    const retry = () => {
+      void summary.refetch();
+      if (members.isError) void members.refetch();
+    };
     return (
-      <ErrorState title="The members could not be loaded." error={summary.error ?? members.error} />
+      <ErrorState
+        title="The members could not be loaded."
+        error={summary.error}
+        action={<TryAgainButton onClick={retry} />}
+      />
     );
   }
-  if (!summary.data || !members.data) {
+  if (summary.isPending || members.isPending) {
+    return <LoadingState label="Loading members…" />;
+  }
+  const membersFailed = members.isError && members.data === undefined;
+  if (!summary.data || (!membersFailed && !members.data)) {
     return (
       <PageMessage title="Audience not found" link={{ to: '/', label: 'Back to audiences' }}>
         This audience doesn’t exist or was archived.
@@ -43,8 +59,11 @@ function MembersView({ id }: { id: string }) {
   }
 
   const { name, memberCount } = summary.data;
-  const { nodes, pageInfo } = members.data.members;
+  const nodes = members.data?.members.nodes ?? [];
+  const pageInfo = members.data?.members.pageInfo;
   const isUpdating = members.isPlaceholderData;
+  const failedRefresh = [summary, members].find((query) => query.isError && query.data);
+  const retryMembers = () => void members.refetch();
   const countryNames = new Map(
     (countries.data ?? []).map((country) => [country.code, countryLabel(country)]),
   );
@@ -71,7 +90,25 @@ function MembersView({ id }: { id: string }) {
         </ButtonLink>
       </div>
 
-      {nodes.length === 0 && pageIndex === 0 ? (
+      {failedRefresh ? (
+        <RefreshFailedNote
+          what="members"
+          updatedAt={failedRefresh.dataUpdatedAt}
+          onRetry={() => {
+            if (summary.isError) void summary.refetch();
+            if (members.isError) void members.refetch();
+          }}
+        />
+      ) : null}
+
+      {membersFailed ? (
+        <MembersLoadError
+          pageIndex={pageIndex}
+          error={members.error}
+          onRetry={retryMembers}
+          onPrevious={goBack}
+        />
+      ) : nodes.length === 0 && pageIndex === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
           <h2 className="text-base font-semibold text-slate-900">No customers match</h2>
           <p className="mt-1 text-sm text-slate-600">No customers match this audience’s filter.</p>
@@ -118,13 +155,48 @@ function MembersView({ id }: { id: string }) {
           <Pager
             rangeLabel={rangeLabel}
             hasPrevious={pageIndex > 0}
-            hasNext={pageInfo.hasNextPage && !isUpdating}
+            hasNext={(pageInfo?.hasNextPage ?? false) && !isUpdating}
             isUpdating={isUpdating}
-            onPrevious={() => setCursors((list) => list.slice(0, -1))}
-            onNext={() => setCursors((list) => [...list, pageInfo.endCursor ?? null])}
+            onPrevious={goBack}
+            onNext={() => setCursors((list) => [...list, pageInfo?.endCursor ?? null])}
           />
         </>
       )}
     </section>
+  );
+}
+
+function MembersLoadError({
+  pageIndex,
+  error,
+  onRetry,
+  onPrevious,
+}: {
+  pageIndex: number;
+  error: unknown;
+  onRetry: () => void;
+  onPrevious: () => void;
+}) {
+  const retry = <TryAgainButton onClick={onRetry} />;
+  if (pageIndex === 0) {
+    return <ErrorState title="The members could not be loaded." error={error} action={retry} />;
+  }
+  const first = pageIndex * MEMBERS_PAGE_SIZE + 1;
+  const last = first + MEMBERS_PAGE_SIZE - 1;
+  return (
+    <>
+      <ErrorState
+        title={`Members ${first.toLocaleString('en')}–${last.toLocaleString('en')} couldn't be loaded.`}
+        error={error}
+        action={retry}
+      />
+      <Pager
+        rangeLabel=""
+        hasPrevious
+        hasNext={false}
+        onPrevious={onPrevious}
+        onNext={() => undefined}
+      />
+    </>
   );
 }

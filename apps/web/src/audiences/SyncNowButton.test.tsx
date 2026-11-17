@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -50,10 +50,11 @@ describe('Sync now on the audience list', () => {
     button.focus();
     await user.keyboard('{Enter}');
     expect(await screen.findByText(/Sync started/)).toBeInTheDocument();
+    await user.tab();
+    expect(screen.getByRole('link', { name: 'View run history' })).toHaveFocus();
   });
 
   it('starts only one sync on a double click', async () => {
-    const user = userEvent.setup();
     const pending: (() => void)[] = [];
     const requests = mockGraphql({
       Audiences: audiences,
@@ -63,7 +64,15 @@ describe('Sync now on the audience list', () => {
         }),
     });
     renderWithProviders(<AudienceListPage />);
-    await user.dblClick(await screen.findByRole('button', { name: 'Sync now A' }));
+    const button = await screen.findByRole('button', { name: 'Sync now A' });
+    // Both clicks land before React re-renders the button as disabled.
+    act(() => {
+      button.click();
+      button.click();
+    });
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    // Let a second request, if one was sent, reach the mock before answering.
+    await act(async () => {});
     pending.forEach((finish) => finish());
     expect(await screen.findByText(/Sync started/)).toBeInTheDocument();
     expect(requests.filter((request) => request.operation === 'StartSync')).toHaveLength(1);
