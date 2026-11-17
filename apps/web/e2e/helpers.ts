@@ -3,8 +3,11 @@ import { type APIRequestContext, expect, type Page } from '@playwright/test';
 // Audiences the tests created; archived after each test so the shared database stays clean.
 export const created: string[] = [];
 
+// The global teardown deletes every audience whose name starts with this.
+export const E2E_PREFIX = '[e2e] ';
+
 export const uniqueName = (label: string) =>
-  `E2E ${label} ${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  `${E2E_PREFIX}${label} ${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
 async function graphql(request: APIRequestContext, query: string, variables: object) {
   const response = await request.post('/graphql', { data: { query, variables } });

@@ -14,6 +14,7 @@ const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: './e2e',
+  globalTeardown: './e2e/global-teardown.ts',
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
   // In CI, the HTML report (with traces) is uploaded as an artifact when e2e fails.
