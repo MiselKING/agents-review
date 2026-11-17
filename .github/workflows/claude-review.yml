@@ -59,6 +59,8 @@ jobs:
         timeout-minutes: 2
         with:
           fetch-depth: 1
+          # Nothing here pushes, so no token stays in .git/config while Claude reads the PR.
+          persist-credentials: false
       # A PR must not change the rules it is reviewed by, so they come from the base branch.
       # The action already does this for CLAUDE.md, .claude/ and .mcp.json, but not these.
       - name: Restore REVIEW.md and every AGENTS.md from the base branch
