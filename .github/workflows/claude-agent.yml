@@ -28,6 +28,8 @@ jobs:
         timeout-minutes: 2
         with:
           fetch-depth: 1
+          # A saved GITHUB_TOKEN would outrank the app token on push, so CI waits for approval.
+          persist-credentials: false
       # The hooks in .claude/settings.json and the project checks need Node and node_modules.
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         timeout-minutes: 5
