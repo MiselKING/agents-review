@@ -9,6 +9,14 @@ type Handler = (variables: Record<string, unknown>) => unknown;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** Returned by a handler to answer with GraphQL errors, like `{ message, code }`. */
+export class MockGraphqlErrors {
+  readonly errors: { message: string; extensions: { code?: string } }[];
+  constructor(...errors: { message: string; code?: string }[]) {
+    this.errors = errors.map(({ message, code }) => ({ message, extensions: { code } }));
+  }
+}
+
 /**
  * Answers GraphQL requests by operation name, like `{ Countries: () => ({ countries: [] }) }`.
  * A handler may return a promise to delay its answer. Returns the requests made, for assertions.
@@ -24,9 +32,12 @@ export function mockGraphql(handlers: Record<string, Handler>) {
       const operation = /(?:query|mutation)\s+(\w+)/.exec(query)?.[1] ?? '';
       requests.push({ operation, variables });
       const handler = handlers[operation];
-      const payload = handler
-        ? { data: await handler(variables) }
-        : { errors: [{ message: `No mock for ${operation}` }] };
+      let payload: unknown = { errors: [{ message: `No mock for ${operation}` }] };
+      if (handler) {
+        const result = await handler(variables);
+        payload =
+          result instanceof MockGraphqlErrors ? { errors: result.errors } : { data: result };
+      }
       return new Response(JSON.stringify(payload), {
         headers: { 'content-type': 'application/json' },
       });

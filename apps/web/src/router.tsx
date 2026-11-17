@@ -6,6 +6,7 @@ import { LoadingState } from './ui/states';
 
 // The builder (with its combobox) loads on first visit, keeping the home page bundle small.
 const loadMembers = () => import('./audiences/AudienceMembersPage');
+const loadRuns = () => import('./runs/RunHistoryPage');
 const loadBuilder = () => import('./audiences/AudienceBuilderPage');
 
 export const routes = [
@@ -15,6 +16,10 @@ export const routes = [
     hydrateFallbackElement: <LoadingState label="Loading…" />,
     children: [
       { path: '/', element: <AudienceListPage /> },
+      {
+        path: '/runs',
+        lazy: async () => ({ Component: (await loadRuns()).RunHistoryPage }),
+      },
       {
         path: '/audiences/new',
         lazy: async () => ({ Component: (await loadBuilder()).NewAudiencePage }),

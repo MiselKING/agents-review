@@ -27,4 +27,18 @@ describe('AppLayout', () => {
     renderAt('/somewhere-else');
     expect(screen.getByRole('link', { name: 'Audiences' })).not.toHaveAttribute('aria-current');
   });
+
+  it('highlights Run history on its page only', () => {
+    renderAt('/runs');
+    expect(screen.getByRole('link', { name: 'Run history' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('link', { name: 'Audiences' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('leaves Run history plain on the list', () => {
+    renderAt('/');
+    expect(screen.getByRole('link', { name: 'Run history' })).not.toHaveAttribute('aria-current');
+  });
 });

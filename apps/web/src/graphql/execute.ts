@@ -2,8 +2,19 @@ import type { TypedDocumentString } from '../gql/graphql';
 
 type GraphQLResponse<TResult> = {
   data?: TResult;
-  errors?: { message: string }[];
+  errors?: { message: string; extensions?: { code?: unknown } }[];
 };
+
+/** A GraphQL `errors` response; `codes` are the `extensions.code` values the API sent. */
+export class GraphQLRequestError extends Error {
+  readonly codes: string[];
+
+  constructor(message: string, codes: string[]) {
+    super(message);
+    this.name = 'GraphQLRequestError';
+    this.codes = codes;
+  }
+}
 
 /**
  * Checks the GraphQL response envelope (an object with `data` and/or an `errors` array).
@@ -41,7 +52,10 @@ export async function execute<TResult, TVariables>(
     throw new Error('Unexpected response from the GraphQL API');
   }
   if (body.errors?.length) {
-    throw new Error(body.errors.map((error) => error.message).join('\n'));
+    const codes = body.errors.flatMap((error) =>
+      typeof error.extensions?.code === 'string' ? [error.extensions.code] : [],
+    );
+    throw new GraphQLRequestError(body.errors.map((error) => error.message).join('\n'), codes);
   }
   if (body.data === undefined) {
     throw new Error('GraphQL response had no data');

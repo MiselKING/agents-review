@@ -24,6 +24,8 @@ type Documents = {
     "\n  mutation CreateAudience($input: CreateAudienceInput!) {\n    createAudience(input: $input) {\n      id\n    }\n  }\n": typeof types.CreateAudienceDocument,
     "\n  mutation UpdateAudience($id: ID!, $input: UpdateAudienceInput!) {\n    updateAudience(id: $id, input: $input) {\n      id\n    }\n  }\n": typeof types.UpdateAudienceDocument,
     "\n  mutation ArchiveAudience($id: ID!) {\n    archiveAudience(id: $id) {\n      id\n    }\n  }\n": typeof types.ArchiveAudienceDocument,
+    "\n  query SyncRuns($first: Int!, $after: String) {\n    syncRuns(first: $first, after: $after) {\n      nodes {\n        id\n        status\n        memberCount\n        syncedCount\n        failedCount\n        error\n        createdAt\n        startedAt\n        finishedAt\n        audience {\n          id\n          name\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": typeof types.SyncRunsDocument,
+    "\n  mutation StartSync($audienceId: ID!) {\n    startSync(audienceId: $audienceId) {\n      id\n    }\n  }\n": typeof types.StartSyncDocument,
 };
 const documents: Documents = {
     "\n  query Audiences {\n    audiences {\n      id\n      name\n      memberCount\n      createdAt\n    }\n  }\n": types.AudiencesDocument,
@@ -35,6 +37,8 @@ const documents: Documents = {
     "\n  mutation CreateAudience($input: CreateAudienceInput!) {\n    createAudience(input: $input) {\n      id\n    }\n  }\n": types.CreateAudienceDocument,
     "\n  mutation UpdateAudience($id: ID!, $input: UpdateAudienceInput!) {\n    updateAudience(id: $id, input: $input) {\n      id\n    }\n  }\n": types.UpdateAudienceDocument,
     "\n  mutation ArchiveAudience($id: ID!) {\n    archiveAudience(id: $id) {\n      id\n    }\n  }\n": types.ArchiveAudienceDocument,
+    "\n  query SyncRuns($first: Int!, $after: String) {\n    syncRuns(first: $first, after: $after) {\n      nodes {\n        id\n        status\n        memberCount\n        syncedCount\n        failedCount\n        error\n        createdAt\n        startedAt\n        finishedAt\n        audience {\n          id\n          name\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n": types.SyncRunsDocument,
+    "\n  mutation StartSync($audienceId: ID!) {\n    startSync(audienceId: $audienceId) {\n      id\n    }\n  }\n": types.StartSyncDocument,
 };
 
 /**
@@ -73,6 +77,14 @@ export function graphql(source: "\n  mutation UpdateAudience($id: ID!, $input: U
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation ArchiveAudience($id: ID!) {\n    archiveAudience(id: $id) {\n      id\n    }\n  }\n"): typeof import('./graphql').ArchiveAudienceDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SyncRuns($first: Int!, $after: String) {\n    syncRuns(first: $first, after: $after) {\n      nodes {\n        id\n        status\n        memberCount\n        syncedCount\n        failedCount\n        error\n        createdAt\n        startedAt\n        finishedAt\n        audience {\n          id\n          name\n        }\n      }\n      pageInfo {\n        hasNextPage\n        endCursor\n      }\n    }\n  }\n"): typeof import('./graphql').SyncRunsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation StartSync($audienceId: ID!) {\n    startSync(audienceId: $audienceId) {\n      id\n    }\n  }\n"): typeof import('./graphql').StartSyncDocument;
 
 
 export function graphql(source: string) {

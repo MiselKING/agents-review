@@ -62,6 +62,12 @@ export type SignedUpConditionInput = {
   window: TimeWindowInput;
 };
 
+export type SyncRunStatus =
+  | 'FAILED'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCEEDED';
+
 /** `amount` is a whole number from 1 to 1000. */
 export type TimeWindowInput = {
   amount: number;
@@ -144,6 +150,21 @@ export type ArchiveAudienceMutationVariables = Exact<{
 
 
 export type ArchiveAudienceMutation = { archiveAudience: { id: string } };
+
+export type SyncRunsQueryVariables = Exact<{
+  first: number;
+  after?: string | null | undefined;
+}>;
+
+
+export type SyncRunsQuery = { syncRuns: { nodes: Array<{ id: string, status: SyncRunStatus, memberCount: number, syncedCount: number, failedCount: number, error: string | null, createdAt: string, startedAt: string | null, finishedAt: string | null, audience: { id: string, name: string } }>, pageInfo: { hasNextPage: boolean, endCursor: string | null } } };
+
+export type StartSyncMutationVariables = Exact<{
+  audienceId: string | number;
+}>;
+
+
+export type StartSyncMutation = { startSync: { id: string } };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -274,3 +295,35 @@ export const ArchiveAudienceDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ArchiveAudienceMutation, ArchiveAudienceMutationVariables>;
+export const SyncRunsDocument = new TypedDocumentString(`
+    query SyncRuns($first: Int!, $after: String) {
+  syncRuns(first: $first, after: $after) {
+    nodes {
+      id
+      status
+      memberCount
+      syncedCount
+      failedCount
+      error
+      createdAt
+      startedAt
+      finishedAt
+      audience {
+        id
+        name
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<SyncRunsQuery, SyncRunsQueryVariables>;
+export const StartSyncDocument = new TypedDocumentString(`
+    mutation StartSync($audienceId: ID!) {
+  startSync(audienceId: $audienceId) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<StartSyncMutation, StartSyncMutationVariables>;
