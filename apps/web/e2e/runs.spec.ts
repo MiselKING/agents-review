@@ -1,10 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { archiveCreatedAudiences, createAudience, uniqueName } from './helpers';
-
-test.afterEach(async ({ request }) => {
-  await archiveCreatedAudiences(request);
-});
+import { createAudience, uniqueName } from './helpers';
 
 test('starts syncs of two audiences from the list and finds both runs', async ({
   page,
