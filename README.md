@@ -4,7 +4,7 @@ Repo: `agents-review` (public). Project name may change.
 
 A test project to learn how to build software with AI agents. Agents do most of the development; I act as tech lead: I write issues, set the rules, review and merge. The app itself is small on purpose. The point is the agent setup around it.
 
-**Status:** Phase 4 of 8, GitHub automation ([build plan](docs/_project-plan.md#build-plan)). 4 of 6 app features are built; the member table and run history page are next.
+**Status:** Phase 4 of 8, GitHub automation ([build plan](docs/_project-plan.md#build-plan)). All 6 app features are built; the eval snapshot and the bare eval runs are next.
 
 Full plan: [docs/_project-plan.md](docs/_project-plan.md). This README is the short version.
 
