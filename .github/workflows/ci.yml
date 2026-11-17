@@ -1,4 +1,10 @@
+# Keep this name: pr-ready.yml listens for it by name.
 name: CI
+run-name: >-
+  ${{
+    github.event_name == 'push' && format('CI · push to {0}', github.ref_name)
+    || format('CI · #{0}', github.event.pull_request.number)
+  }}
 
 on:
   # Every PR, whatever its target branch (main today, maybe develop or qa later). Drafts included.

@@ -1,4 +1,13 @@
-name: Claude
+name: Claude mention
+# Every comment and review starts a run; those without `@claude` are named so they're easy to skip.
+run-name: >-
+  ${{
+    !contains(github.event.comment.body || github.event.review.body, '@claude')
+      && format('Claude · #{0} no @claude (skipped)', github.event.issue.number || github.event.pull_request.number)
+    || startsWith(github.event.comment.body, '@claude plan')
+      && format('Claude plan · #{0}', github.event.issue.number)
+    || format('Claude · #{0}', github.event.issue.number || github.event.pull_request.number)
+  }}
 
 # Runs whenever an issue comment, PR comment or PR review mentions `@claude`.
 #

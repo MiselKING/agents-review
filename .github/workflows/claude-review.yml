@@ -1,4 +1,12 @@
-name: Review
+name: AI review
+run-name: >-
+  ${{
+    github.event.pull_request.draft && format('Review · #{0} draft (skipped)', github.event.pull_request.number)
+    || format('Review · #{0} ({1})', github.event.pull_request.number,
+         github.event.action == 'synchronize' && 'new commits'
+         || github.event.action == 'ready_for_review' && 'marked ready'
+         || github.event.action)
+  }}
 
 # On every push to a ready (non-draft) PR, once CI passes: Claude reviews it, then CodeRabbit is asked to.
 # Drafts wait: pr-ready.yml marks a draft ready after its CI passes, and that starts this workflow.
