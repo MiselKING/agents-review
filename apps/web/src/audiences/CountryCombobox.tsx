@@ -2,7 +2,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { useMemo } from 'react';
 
 import type { CountriesQuery } from '../gql/graphql';
-import { useCountries } from './api';
+import { countryLabel, useCountries } from './api';
 
 type Country = CountriesQuery['countries'][number];
 
@@ -15,8 +15,6 @@ interface CountryComboboxProps {
   invalid: boolean;
   describedBy: string | undefined;
 }
-
-const countryLabel = (country: Country) => `${country.name} (${country.code})`;
 
 /** Searchable by name or code; stores the ISO 3166-1 alpha-3 code. */
 export function CountryCombobox({

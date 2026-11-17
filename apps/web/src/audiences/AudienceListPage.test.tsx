@@ -38,6 +38,10 @@ describe('AudienceListPage', () => {
     const row = link.closest('tr');
     expect(row).toHaveTextContent('1,234');
     expect(row).toHaveTextContent('Nov 14, 2026');
+    expect(screen.getByRole('link', { name: 'View members of Recent buyers' })).toHaveAttribute(
+      'href',
+      '/audiences/7/members',
+    );
     expect(screen.getByRole('button', { name: 'Archive Recent buyers' })).toBeInTheDocument();
   });
 

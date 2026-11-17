@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { graphql } from '../gql';
-import type { AudienceFilterInput } from '../gql/graphql';
+import type { AudienceFilterInput, CountriesQuery } from '../gql/graphql';
 import { execute } from '../graphql/execute';
 
 const AudiencesQuery = graphql(`
@@ -45,6 +45,39 @@ const AudienceQuery = graphql(`
               unit
             }
           }
+        }
+      }
+    }
+  }
+`);
+
+const AudienceSummaryQuery = graphql(`
+  query AudienceSummary($id: ID!) {
+    audience(id: $id) {
+      id
+      name
+      memberCount
+    }
+  }
+`);
+
+export const MEMBERS_PAGE_SIZE = 25;
+
+const AudienceMembersQuery = graphql(`
+  query AudienceMembers($id: ID!, $after: String) {
+    audience(id: $id) {
+      id
+      members(first: 25, after: $after) {
+        nodes {
+          id
+          email
+          firstName
+          lastName
+          country
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
         }
       }
     }
@@ -95,6 +128,9 @@ const ArchiveAudienceMutation = graphql(`
 const keys = {
   audiences: ['audiences'] as const,
   audience: (id: string) => ['audience', id] as const,
+  audienceSummary: (id: string) => ['audience', id, 'summary'] as const,
+  audienceMembers: (id: string, after: string | null) =>
+    ['audience', id, 'members', after] as const,
   countries: ['countries'] as const,
   preview: (definition: AudienceFilterInput | null) => ['audience-preview', definition] as const,
 };
@@ -117,6 +153,27 @@ export function useAudience(id: string) {
     queryFn: async () => (await execute(AudienceQuery, { id })).audience,
   });
 }
+
+/** Name and member count, fetched apart from the members so turning a page doesn't recount. */
+export function useAudienceSummary(id: string) {
+  return useQuery({
+    queryKey: keys.audienceSummary(id),
+    queryFn: async () => (await execute(AudienceSummaryQuery, { id })).audience,
+  });
+}
+
+/** One page of members; `after` is the previous page's endCursor, null for the first. */
+export function useAudienceMembers(id: string, after: string | null) {
+  return useQuery({
+    queryKey: keys.audienceMembers(id, after),
+    queryFn: async () => (await execute(AudienceMembersQuery, { id, after })).audience,
+    // Keep the current rows on screen while the next page loads.
+    placeholderData: (previous) => previous,
+  });
+}
+
+export const countryLabel = (country: CountriesQuery['countries'][number]) =>
+  `${country.name} (${country.code})`;
 
 export function useCountries() {
   return useQuery({

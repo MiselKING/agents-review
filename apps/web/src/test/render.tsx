@@ -35,11 +35,11 @@ export function mockGraphql(handlers: Record<string, Handler>) {
   return requests;
 }
 
-export function renderWithProviders(ui: ReactNode) {
+export function renderWithProviders(ui: ReactNode, initialEntry = '/') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>{ui}</MemoryRouter>
     </QueryClientProvider>,
   );
 }

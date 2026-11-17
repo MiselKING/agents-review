@@ -95,6 +95,21 @@ export type AudienceQuery = { audience: { id: string, name: string, definition: 
         | { __typename: 'SignedUpCondition', operator: ConditionOperator, window: { amount: number, unit: WindowUnit } }
       > } } | null };
 
+export type AudienceSummaryQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type AudienceSummaryQuery = { audience: { id: string, name: string, memberCount: number } | null };
+
+export type AudienceMembersQueryVariables = Exact<{
+  id: string | number;
+  after?: string | null | undefined;
+}>;
+
+
+export type AudienceMembersQuery = { audience: { id: string, members: { nodes: Array<{ id: string, email: string, firstName: string, lastName: string, country: string }>, pageInfo: { hasNextPage: boolean, endCursor: string | null } } } | null };
+
 export type CountriesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -193,6 +208,35 @@ export const AudienceDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AudienceQuery, AudienceQueryVariables>;
+export const AudienceSummaryDocument = new TypedDocumentString(`
+    query AudienceSummary($id: ID!) {
+  audience(id: $id) {
+    id
+    name
+    memberCount
+  }
+}
+    `) as unknown as TypedDocumentString<AudienceSummaryQuery, AudienceSummaryQueryVariables>;
+export const AudienceMembersDocument = new TypedDocumentString(`
+    query AudienceMembers($id: ID!, $after: String) {
+  audience(id: $id) {
+    id
+    members(first: 25, after: $after) {
+      nodes {
+        id
+        email
+        firstName
+        lastName
+        country
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<AudienceMembersQuery, AudienceMembersQueryVariables>;
 export const CountriesDocument = new TypedDocumentString(`
     query Countries {
   countries {
