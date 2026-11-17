@@ -273,4 +273,27 @@ describe('AudienceMembersPage', () => {
     await act(async () => {});
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
+
+  it('dates the members note by the member rows, not the summary', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-11-14T10:00:00'));
+    let failing = false;
+    mockGraphql({
+      AudienceSummary: () => (failing ? new MockGraphqlErrors({ message: 'down' }) : summary(40)),
+      Countries: countries,
+      AudienceMembers: () =>
+        failing
+          ? new MockGraphqlErrors({ message: 'Database is down' })
+          : membersPage([member(1)], false).data,
+    });
+    const { queryClient } = renderPage();
+    await screen.findByText('person1@example.com');
+    // The summary refreshes successfully later than the members.
+    vi.setSystemTime(new Date('2026-11-14T10:05:00'));
+    await act(() => queryClient.refetchQueries({ queryKey: ['audience', '7', 'summary'] }));
+    failing = true;
+    await act(() => queryClient.refetchQueries({ queryKey: ['audience', '7'] }));
+    const note = await screen.findByRole('status');
+    expect(note).toHaveTextContent('Showing members as of 10:00.');
+  });
 });

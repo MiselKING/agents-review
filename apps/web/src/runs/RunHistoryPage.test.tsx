@@ -230,4 +230,18 @@ describe('RunHistoryPage', () => {
     expect(await screen.findByText('Succeeded')).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
+
+  it('notes a failed refresh when there are no runs yet', async () => {
+    let failing = false;
+    mockGraphql({
+      SyncRuns: () => (failing ? new MockGraphqlErrors({ message: 'Database is down' }) : page([])),
+    });
+    const { queryClient } = renderWithProviders(<RunHistoryPage />);
+    expect(await screen.findByText('No sync runs yet')).toBeInTheDocument();
+    failing = true;
+    await act(() => queryClient.refetchQueries({ queryKey: ['sync-runs'] }));
+    const note = await screen.findByRole('status');
+    expect(within(note).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getByText('No sync runs yet')).toBeInTheDocument();
+  });
 });

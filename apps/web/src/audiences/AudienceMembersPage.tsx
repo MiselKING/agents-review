@@ -62,7 +62,8 @@ function MembersView({ id }: { id: string }) {
   const nodes = members.data?.members.nodes ?? [];
   const pageInfo = members.data?.members.pageInfo;
   const isUpdating = members.isPlaceholderData;
-  const failedRefresh = [summary, members].find((query) => query.isError && query.data);
+  const membersRefreshFailed = members.isError && members.data !== undefined;
+  const failedRefresh = membersRefreshFailed || summary.isError;
   const retryMembers = () => void members.refetch();
   const countryNames = new Map(
     (countries.data ?? []).map((country) => [country.code, countryLabel(country)]),
@@ -92,8 +93,8 @@ function MembersView({ id }: { id: string }) {
 
       {failedRefresh ? (
         <RefreshFailedNote
-          what="members"
-          updatedAt={failedRefresh.dataUpdatedAt}
+          what={membersRefreshFailed ? 'members' : 'the member count'}
+          updatedAt={membersRefreshFailed ? members.dataUpdatedAt : summary.dataUpdatedAt}
           onRetry={() => {
             if (summary.isError) void summary.refetch();
             if (members.isError) void members.refetch();

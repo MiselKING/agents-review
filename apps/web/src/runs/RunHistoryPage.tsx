@@ -73,7 +73,15 @@ export function RunHistoryPage() {
         ? 'No more runs'
         : `${start.toLocaleString('en')}–${(start + nodes.length - 1).toLocaleString('en')}`;
 
-    content =
+    const refreshNote = runs.isError ? (
+      <RefreshFailedNote
+        what="runs"
+        updatedAt={runs.dataUpdatedAt}
+        onRetry={() => void runs.refetch()}
+      />
+    ) : null;
+
+    const body =
       nodes.length === 0 && pageIndex === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
           <h2 className="text-base font-semibold text-slate-900">No sync runs yet</h2>
@@ -84,13 +92,6 @@ export function RunHistoryPage() {
         </div>
       ) : (
         <>
-          {runs.isError ? (
-            <RefreshFailedNote
-              what="runs"
-              updatedAt={runs.dataUpdatedAt}
-              onRetry={() => void runs.refetch()}
-            />
-          ) : null}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <table
               aria-busy={isUpdating}
@@ -170,6 +171,12 @@ export function RunHistoryPage() {
           />
         </>
       );
+    content = (
+      <>
+        {refreshNote}
+        {body}
+      </>
+    );
   }
 
   return (
