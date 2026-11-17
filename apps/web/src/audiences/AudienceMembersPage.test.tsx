@@ -1,9 +1,9 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { mockGraphql, renderWithProviders } from '../test/render';
+import { MockGraphqlErrors, mockGraphql, renderWithProviders } from '../test/render';
 import { AudienceMembersPage } from './AudienceMembersPage';
 
 afterEach(() => {
@@ -182,5 +182,118 @@ describe('AudienceMembersPage', () => {
     mockGraphql({});
     renderPage();
     expect(screen.getByText('Loading members…')).toBeInTheDocument();
+  });
+
+  it('shows the whole-page error when the summary fails, and Try again recovers', async () => {
+    let calls = 0;
+    mockGraphql({
+      AudienceSummary: () => {
+        calls += 1;
+        return calls === 1 ? new MockGraphqlErrors({ message: 'Database is down' }) : summary(40);
+      },
+      Countries: countries,
+      AudienceMembers: () => membersPage([member(1)], false).data,
+    });
+    renderPage();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('The members could not be loaded.');
+    expect(screen.queryByRole('heading', { name: 'Germans' })).not.toBeInTheDocument();
+    await userEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('heading', { name: 'Germans', level: 1 })).toBeInTheDocument();
+    expect(await screen.findByText('person1@example.com')).toBeInTheDocument();
+  });
+
+  it('keeps the heading when the first members page fails, and Try again recovers', async () => {
+    let calls = 0;
+    mockGraphql({
+      AudienceSummary: () => summary(40),
+      Countries: countries,
+      AudienceMembers: () => {
+        calls += 1;
+        return calls === 1
+          ? new MockGraphqlErrors({ message: 'Database is down' })
+          : membersPage([member(1)], false).data;
+      },
+    });
+    renderPage();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('The members could not be loaded.');
+    expect(alert).toHaveTextContent('Database is down');
+    expect(screen.getByRole('heading', { name: 'Germans', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('40 customers match now')).toBeInTheDocument();
+    await userEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('person1@example.com')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps Previous when a later page fails, and Previous returns to page 1', async () => {
+    mockGraphql({
+      AudienceSummary: () => summary(40),
+      Countries: countries,
+      AudienceMembers: ({ after }) =>
+        after === null
+          ? membersPage([member(1)], true).data
+          : new MockGraphqlErrors({ message: 'Database is down' }),
+    });
+    renderPage();
+    await screen.findByText('person1@example.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent("Members 26–50 couldn't be loaded.");
+    expect(screen.getByRole('heading', { name: 'Germans', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('40 customers match now')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(await screen.findByText('person1@example.com')).toBeInTheDocument();
+    expect(screen.getByText('1–1 of 40')).toBeInTheDocument();
+  });
+
+  it('keeps the table and notes it when a refresh fails', async () => {
+    let failing = false;
+    mockGraphql({
+      AudienceSummary: () => summary(40),
+      Countries: countries,
+      AudienceMembers: () =>
+        failing
+          ? new MockGraphqlErrors({ message: 'Database is down' })
+          : membersPage([member(1)], false).data,
+    });
+    const { queryClient } = renderPage();
+    await screen.findByText('person1@example.com');
+    failing = true;
+    await act(() => queryClient.refetchQueries({ queryKey: ['audience', '7', 'members'] }));
+    const note = await screen.findByRole('status');
+    expect(note).toHaveTextContent(/Couldn't refresh\. Showing members as of \d{2}:\d{2}\./);
+    expect(screen.getByText('person1@example.com')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    failing = false;
+    await userEvent.click(within(note).getByRole('button', { name: 'Try again' }));
+    await act(async () => {});
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('dates the members note by the member rows, not the summary', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-11-14T10:00:00'));
+    let failing = false;
+    mockGraphql({
+      AudienceSummary: () => (failing ? new MockGraphqlErrors({ message: 'down' }) : summary(40)),
+      Countries: countries,
+      AudienceMembers: () =>
+        failing
+          ? new MockGraphqlErrors({ message: 'Database is down' })
+          : membersPage([member(1)], false).data,
+    });
+    const { queryClient } = renderPage();
+    await screen.findByText('person1@example.com');
+    // The summary refreshes successfully later than the members.
+    vi.setSystemTime(new Date('2026-11-14T10:05:00'));
+    await act(() => queryClient.refetchQueries({ queryKey: ['audience', '7', 'summary'] }));
+    failing = true;
+    await act(() => queryClient.refetchQueries({ queryKey: ['audience', '7'] }));
+    const note = await screen.findByRole('status');
+    expect(note).toHaveTextContent('Showing members as of 10:00.');
   });
 });

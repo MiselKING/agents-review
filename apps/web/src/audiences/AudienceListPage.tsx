@@ -4,6 +4,7 @@ import { ButtonLink } from '../ui/Button';
 import { ErrorState, LoadingState } from '../ui/states';
 import { useAudiences } from './api';
 import { ArchiveAudienceButton } from './ArchiveAudienceButton';
+import { SyncNowButton } from './SyncNowButton';
 
 const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
 
@@ -67,7 +68,8 @@ export function AudienceListPage() {
                     {dateFormat.format(new Date(audience.createdAt))}
                   </time>
                 </td>
-                <td className="flex items-center justify-end gap-2 px-4 py-3 text-right">
+                <td className="flex items-start justify-end gap-2 px-4 py-3 text-right">
+                  <SyncNowButton id={audience.id} name={audience.name} />
                   <ButtonLink to={`/audiences/${audience.id}/members`} variant="ghost">
                     View members <span className="sr-only">of {audience.name}</span>
                   </ButtonLink>

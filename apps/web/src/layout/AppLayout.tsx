@@ -32,6 +32,9 @@ function Shell({ children }: { children: React.ReactNode }) {
             <SectionLink to="/" section="/audiences">
               Audiences
             </SectionLink>
+            <SectionLink to="/runs" section="/runs">
+              Run history
+            </SectionLink>
           </nav>
         </div>
       </header>
