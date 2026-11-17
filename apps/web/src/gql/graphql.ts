@@ -104,6 +104,7 @@ export type AudienceSummaryQuery = { audience: { id: string, name: string, membe
 
 export type AudienceMembersQueryVariables = Exact<{
   id: string | number;
+  first: number;
   after?: string | null | undefined;
 }>;
 
@@ -218,10 +219,10 @@ export const AudienceSummaryDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<AudienceSummaryQuery, AudienceSummaryQueryVariables>;
 export const AudienceMembersDocument = new TypedDocumentString(`
-    query AudienceMembers($id: ID!, $after: String) {
+    query AudienceMembers($id: ID!, $first: Int!, $after: String) {
   audience(id: $id) {
     id
-    members(first: 25, after: $after) {
+    members(first: $first, after: $after) {
       nodes {
         id
         email

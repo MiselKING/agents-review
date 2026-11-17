@@ -64,10 +64,10 @@ const AudienceSummaryQuery = graphql(`
 export const MEMBERS_PAGE_SIZE = 25;
 
 const AudienceMembersQuery = graphql(`
-  query AudienceMembers($id: ID!, $after: String) {
+  query AudienceMembers($id: ID!, $first: Int!, $after: String) {
     audience(id: $id) {
       id
-      members(first: 25, after: $after) {
+      members(first: $first, after: $after) {
         nodes {
           id
           email
@@ -166,7 +166,8 @@ export function useAudienceSummary(id: string) {
 export function useAudienceMembers(id: string, after: string | null) {
   return useQuery({
     queryKey: keys.audienceMembers(id, after),
-    queryFn: async () => (await execute(AudienceMembersQuery, { id, after })).audience,
+    queryFn: async () =>
+      (await execute(AudienceMembersQuery, { id, first: MEMBERS_PAGE_SIZE, after })).audience,
     // Keep the current rows on screen while the next page loads.
     placeholderData: (previous) => previous,
   });

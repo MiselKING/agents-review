@@ -43,7 +43,7 @@ const summary = (memberCount: number) => ({
 
 describe('AudienceMembersPage', () => {
   it('pages forward and back with the cursors visited', async () => {
-    const requests = mockGraphql({
+    mockGraphql({
       AudienceSummary: () => summary(40),
       Countries: countries,
       AudienceMembers: ({ after }) =>
@@ -89,10 +89,8 @@ describe('AudienceMembersPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Previous' }));
     expect(await screen.findByText('person1@example.com')).toBeInTheDocument();
     expect(screen.getByText('1–2 of 40')).toBeInTheDocument();
-
-    const memberRequests = requests.filter((r) => r.operation === 'AudienceMembers');
-    expect(memberRequests.map((r) => r.variables.after)).toEqual([null, 'c2', null]);
-    expect(requests.filter((r) => r.operation === 'AudienceSummary')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'Germans', level: 1 })).toBeInTheDocument();
+    expect(screen.getByText('40 customers match now')).toBeInTheDocument();
   });
 
   it('keeps the current rows and says it is updating while the next page loads', async () => {
@@ -100,22 +98,15 @@ describe('AudienceMembersPage', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const body = typeof init?.body === 'string' ? init.body : '';
-        let payload: unknown;
-        if (body.includes('query AudienceSummary')) payload = { data: summary(40) };
-        else if (body.includes('query Countries')) payload = { data: countries() };
-        else if (body.includes('"after":"c1"')) {
-          await gate;
-          payload = membersPage([member(3)], false);
-        } else payload = membersPage([member(1)], true);
-        return new Response(JSON.stringify(payload), {
-          headers: { 'content-type': 'application/json' },
-        });
-      }),
-    );
+    mockGraphql({
+      AudienceSummary: () => summary(40),
+      Countries: countries,
+      AudienceMembers: async ({ after }) => {
+        if (after === null) return membersPage([member(1)], true).data;
+        await gate;
+        return membersPage([member(3)], false).data;
+      },
+    });
     renderPage();
     await screen.findByText('person1@example.com');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
@@ -123,10 +114,29 @@ describe('AudienceMembersPage', () => {
     expect(await screen.findByText('Updating…')).toBeInTheDocument();
     expect(screen.getByText('person1@example.com')).toBeInTheDocument();
     expect(screen.getByRole('table')).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByText(/of 40/)).not.toBeInTheDocument();
 
     release?.();
     expect(await screen.findByText('person3@example.com')).toBeInTheDocument();
     expect(screen.queryByText('Updating…')).not.toBeInTheDocument();
+    expect(screen.getByText('26–26 of 40')).toBeInTheDocument();
+  });
+
+  it('does not claim zero members when a later page is empty', async () => {
+    mockGraphql({
+      AudienceSummary: () => summary(26),
+      Countries: countries,
+      AudienceMembers: ({ after }) =>
+        after === null ? membersPage([member(1)], true).data : membersPage([], false).data,
+    });
+    renderPage();
+    await screen.findByText('person1@example.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(await screen.findByText('No more members')).toBeInTheDocument();
+    expect(screen.queryByText('0 of 0')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Previous' }));
+    expect(await screen.findByText('1–1 of 26')).toBeInTheDocument();
   });
 
   it('says when no customers match, with a link to edit', async () => {

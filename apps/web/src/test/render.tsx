@@ -11,13 +11,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 /**
  * Answers GraphQL requests by operation name, like `{ Countries: () => ({ countries: [] }) }`.
- * Returns the requests made, for assertions.
+ * A handler may return a promise to delay its answer. Returns the requests made, for assertions.
  */
 export function mockGraphql(handlers: Record<string, Handler>) {
   const requests: { operation: string; variables: Record<string, unknown> }[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn((_url: string, init?: RequestInit) => {
+    vi.fn(async (_url: string, init?: RequestInit) => {
       const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
       const query = isRecord(body) && typeof body.query === 'string' ? body.query : '';
       const variables = isRecord(body) && isRecord(body.variables) ? body.variables : {};
@@ -25,11 +25,11 @@ export function mockGraphql(handlers: Record<string, Handler>) {
       requests.push({ operation, variables });
       const handler = handlers[operation];
       const payload = handler
-        ? { data: handler(variables) }
+        ? { data: await handler(variables) }
         : { errors: [{ message: `No mock for ${operation}` }] };
-      return Promise.resolve(
-        new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } }),
-      );
+      return new Response(JSON.stringify(payload), {
+        headers: { 'content-type': 'application/json' },
+      });
     }),
   );
   return requests;

@@ -49,9 +49,11 @@ function MembersView({ id }: { id: string }) {
     (countries.data ?? []).map((country) => [country.code, countryLabel(country)]),
   );
   const start = pageIndex * MEMBERS_PAGE_SIZE + 1;
-  const rangeLabel =
-    nodes.length === 0
-      ? '0 of 0'
+  // The shown rows are the previous page's while updating, so no range fits them yet.
+  const rangeLabel = isUpdating
+    ? ''
+    : nodes.length === 0
+      ? 'No more members'
       : `${start.toLocaleString('en')}–${(start + nodes.length - 1).toLocaleString('en')} of ${memberCount.toLocaleString('en')}`;
 
   return (

@@ -137,11 +137,16 @@ test('pages through the members of an audience', async ({ page, request }) => {
   await expect(table.getByRole('row')).toHaveCount(26);
   await expect(page.getByText(/^1–25 of /)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Previous' })).toBeDisabled();
+  const firstEmail = await table.getByRole('row').nth(1).getByRole('cell').nth(1).innerText();
+  const lastOnFirstPage = await table.getByRole('row').nth(25).getByRole('cell').nth(1).innerText();
 
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText(/^26–\d+ of /)).toBeVisible();
+  await expect(table.getByRole('cell', { name: firstEmail, exact: true })).toHaveCount(0);
+  await expect(table.getByRole('cell', { name: lastOnFirstPage, exact: true })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Previous' }).click();
+  await expect(table.getByRole('cell', { name: firstEmail, exact: true })).toBeVisible();
   await expect(page.getByText(/^1–25 of /)).toBeVisible();
   await expect(table.getByRole('row')).toHaveCount(26);
 });
