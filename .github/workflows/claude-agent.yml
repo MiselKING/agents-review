@@ -28,6 +28,8 @@ jobs:
       # The action trades this for the Claude GitHub App token it pushes with.
       id-token: write
       actions: read
+    outputs:
+      branch: ${{ steps.claude.outputs.branch_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 2
@@ -75,14 +77,22 @@ jobs:
             --max-turns 60
             --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
             --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
+
+  # A fresh runner with no checkout: the build job ran code Claude wrote, so the personal token stays out of it.
+  open-pr:
+    needs: build
+    if: ${{ needs.build.outputs.branch != '' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
       # A personal token, so CI runs on the PR without "Approve workflows to run".
       - name: Open the draft PR
-        if: ${{ steps.claude.outputs.branch_name != '' }}
         timeout-minutes: 2
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           REPO: ${{ github.repository }}
-          BRANCH: ${{ steps.claude.outputs.branch_name }}
+          BRANCH: ${{ needs.build.outputs.branch }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
           if [ -n "$(gh pr list --repo "$REPO" --head "$BRANCH" --json number --jq '.[].number')" ]; then

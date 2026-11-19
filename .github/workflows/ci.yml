@@ -1,4 +1,4 @@
-# Keep this name: pr-ready.yml listens for it by name.
+# Keep this name: pr-ready.yml and claude-ci-fix.yml listen for it by name.
 name: CI
 run-name: >-
   ${{
@@ -133,10 +133,43 @@ jobs:
           path: apps/web/playwright-report/
           retention-days: 7
 
+  # Workflow files: expressions, contexts and permissions, plus every `run:` script through ShellCheck.
+  actionlint:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 2
+        with:
+          persist-credentials: false
+      # Pinned releases, checked against their SHA-256 (as GitHub lists them for each release asset).
+      - name: Install actionlint and ShellCheck
+        timeout-minutes: 2
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          SHELLCHECK_VERSION: 0.11.0
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLo actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  actionlint.tar.gz" | sha256sum -c -
+          curl -fsSLo shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz"
+          echo "$SHELLCHECK_SHA256  shellcheck.tar.xz" | sha256sum -c -
+          mkdir -p bin
+          tar -xzf actionlint.tar.gz -C bin actionlint
+          tar -xJf shellcheck.tar.xz -C bin --strip-components=1 "shellcheck-v$SHELLCHECK_VERSION/shellcheck"
+      # The ShellCheck path is explicit: if it were missing, actionlint would skip the scripts silently.
+      - name: Lint the workflows
+        timeout-minutes: 2
+        run: |
+          "$RUNNER_TEMP/bin/shellcheck" --version
+          "$RUNNER_TEMP/bin/actionlint" -shellcheck "$RUNNER_TEMP/bin/shellcheck"
+
   # The one check that rulesets require, on any branch.
   ci:
     if: ${{ always() }}
-    needs: [checks, setup, e2e]
+    needs: [checks, setup, e2e, actionlint]
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
