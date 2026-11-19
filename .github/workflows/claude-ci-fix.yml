@@ -6,7 +6,7 @@ run-name: >-
     || format('Claude CI fix · {0}', github.event.workflow_run.pull_requests[0].number && format('#{0}', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_branch)
   }}
 
-# CI failed on a PR: ask Claude for one fix with an `@claude` comment. claude.yml does the work: it reads the
+# CI failed on a PR: ask Claude for one fix with an `@claude` comment. claude-mention.yml does the work: it reads the
 # failed logs with the action's CI tools and pushes the fix. One request per PR; delete it to allow another.
 on:
   workflow_run:

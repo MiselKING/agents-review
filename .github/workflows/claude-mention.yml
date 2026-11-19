@@ -17,7 +17,7 @@ run-name: >-
 #
 # The appended system prompt (at the bottom) adds two rules to every run:
 # - `@claude plan` gets a plan only: no edits, no branch, no commit.
-#   You approve the plan by adding the `agent` label (claude-agent.yml).
+#   You approve the plan by adding the `agent` label (claude-build.yml).
 # - This runner has no Postgres or browsers, so database and e2e tests are left to CI.
 on:
   # A new comment on an issue, or in a PR's Conversation tab.
@@ -34,7 +34,7 @@ permissions: {}
 
 # One run at a time per issue or PR; a second comment waits for the first run.
 concurrency:
-  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  group: claude-mention-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
