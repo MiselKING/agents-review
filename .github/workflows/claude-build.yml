@@ -37,13 +37,17 @@ jobs:
           fetch-depth: 1
           # A saved GITHUB_TOKEN would outrank the app token on push, so CI waits for approval.
           persist-credentials: false
-      # The hooks in .claude/settings.json and the project checks need Node and node_modules.
+      # For `pnpm format` and `pnpm codegen`, the only commands Claude may run.
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         timeout-minutes: 5
         with:
           cache: true
           save-cache: false
           require-lockfile: true
+      # The action saves images from the issue here, outside the workspace, and Claude reads them.
+      - name: Create the comment images folder
+        timeout-minutes: 1
+        run: mkdir -p /tmp/github-images
       # No `github_token` input: pushes made with GITHUB_TOKEN don't start CI.
       - id: claude
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
@@ -53,6 +57,9 @@ jobs:
           label_trigger: agent
           # With a prompt, this keeps the branch and the progress comment of an `@claude` run.
           track_progress: true
+          # Commands Claude runs see its tokens, and tests and project scripts run the branch's code, so CI runs the checks.
+          # No hooks: they run lint and typecheck. Claude's file tools refuse paths outside the workspace and the images folder.
+          settings: '{"disableAllHooks": true, "permissions": {"blockReadsOutsideWorkingDirectories": true}}'
           prompt: |
             Build issue #${{ github.event.issue.number }} in ${{ github.repository }}.
 
@@ -61,9 +68,11 @@ jobs:
                the approved plan: follow it, and where a correction disagrees with the plan,
                the correction wins. If there is no plan, build from the acceptance criteria.
             2. Follow AGENTS.md. Stay inside the issue's scope and its "Out of scope" section.
-            3. Run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm format`, plus
-               `pnpm codegen:check` if you touched the GraphQL schema or queries. This runner
-               has no Postgres and no Playwright browsers, so leave database and e2e tests to CI.
+            3. Run `pnpm codegen` if you changed the GraphQL schema or queries, then
+               `pnpm format`. Those are the only commands you can run here: CI runs lint,
+               typecheck and every test after you push, and asks you to fix a failure. If the
+               work needs a change to package.json, .npmrc, pnpm-workspace.yaml, codegen.ts or
+               .oxfmtrc.json, don't make it; explain in your comment why it's needed.
             4. Commit with Conventional Commits and push your branch. Make the first commit's
                subject the PR title you want. Do not open the PR; the workflow does.
             5. Finish your comment on the issue with: what changed, why, how you tested it,
@@ -73,15 +82,18 @@ jobs:
             and explain in your comment why it's needed.
           # Opus wrote the plan; Sonnet builds from it. A full model ID, so it changes only here.
           # acceptEdits, the action's strict mode for this kind of run: edits inside the checkout, other commands only
-          # from --allowedTools. The default, auto, lets a safety review approve commands the list leaves out.
+          # from allow rules. The default, auto, lets a safety review approve commands the list leaves out.
+          # The deny rules cover the pnpm commands .claude/settings.json allows, the files that change what
+          # format and codegen run, and .git: its config holds the token, and its hooks run on commit.
           claude_args: |
             --model claude-sonnet-5-5
             --max-turns 60
             --permission-mode acceptEdits
-            --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
-            --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
+            --add-dir /tmp/github-images
+            --allowedTools "Bash(pnpm format),Bash(pnpm codegen)"
+            --disallowedTools "Bash(pnpm lint*),Bash(pnpm typecheck*),Bash(pnpm test*),Bash(pnpm --filter*),Read(./.git/**),Read(//proc/**),Edit(./.git/**),Edit(**/package.json),Edit(**/.npmrc),Edit(./pnpm-workspace.yaml),Edit(./codegen.ts),Edit(./.oxfmtrc.json),Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
 
-  # A fresh runner with no checkout: the build job ran code Claude wrote, so the personal token stays out of it.
+  # A fresh runner with no checkout: the build job held the branch Claude wrote, so the personal token stays out of it.
   open-pr:
     needs: build
     if: ${{ needs.build.outputs.branch != '' }}

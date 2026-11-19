@@ -20,8 +20,8 @@ run-name: >-
 #
 # - `@claude plan` (the `plan` job): Opus replies with a plan and can't edit, commit or push.
 #   You approve the plan by adding the `agent` label (claude-build.yml).
-# - Anything else (the `claude` job): Sonnet does what the comment asks. This runner has
-#   no Postgres or browsers, so database and e2e tests are left to CI.
+# - Anything else (the `claude` job): Sonnet does what the comment asks. It can run only
+#   `pnpm format` and `pnpm codegen`; CI runs lint, typecheck and tests after its push.
 #
 # Comments from bots and from people without access start no job. The action would refuse
 # them anyway, but only after checkout and install.
@@ -65,18 +65,25 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+      # The action saves images from comments here, outside the workspace, and Claude reads them.
+      - name: Create the comment images folder
+        timeout-minutes: 1
+        run: mkdir -p /tmp/github-images
       - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # The stop hook runs lint and typecheck, which need an install; a plan changes nothing.
-          settings: '{"disableAllHooks": true}'
+          # No hooks: they run lint and typecheck, which need an install; a plan changes nothing.
+          # Claude's file tools refuse paths outside the workspace and the images folder, such as /proc.
+          settings: '{"disableAllHooks": true, "permissions": {"blockReadsOutsideWorkingDirectories": true}}'
           # Opus plans. A full model ID, so it changes only here.
-          # dontAsk: anything not allowed is denied. The deny rules also cover the action's own git commands.
+          # dontAsk: anything not allowed is denied. Denying all Bash also denies the action's git wrapper scripts.
+          # .git/config holds the token in the remote URL.
           claude_args: |
             --model claude-opus-5-5
             --max-turns 30
             --permission-mode dontAsk
-            --disallowedTools "Edit,Write,NotebookEdit,Bash(git add:*),Bash(git rm:*),Bash(git commit:*),Bash(git push:*)"
+            --add-dir /tmp/github-images
+            --disallowedTools "Bash,Edit,Write,NotebookEdit,Read(./.git/**),Read(//proc/**)"
             --append-system-prompt "Reply with an implementation plan only: the files you would change, the order of steps, the tests you would add, and open questions. You can't edit files, commit or push in this run."
 
   claude:
@@ -103,26 +110,35 @@ jobs:
           fetch-depth: 1
           # A saved GITHUB_TOKEN would outrank the app token on push, so CI waits for approval.
           persist-credentials: false
-      # The hooks in .claude/settings.json and the project checks need Node and node_modules.
+      # For `pnpm format` and `pnpm codegen`, the only commands Claude may run.
       - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         timeout-minutes: 5
         with:
           cache: true
           save-cache: false
           require-lockfile: true
+      # The action saves images from comments here, outside the workspace, and Claude reads them.
+      - name: Create the comment images folder
+        timeout-minutes: 1
+        run: mkdir -p /tmp/github-images
       # No `github_token` input: pushes made with GITHUB_TOKEN don't start CI.
       - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
+          # Commands Claude runs see its tokens, and tests and project scripts run the branch's code, so CI runs the checks.
+          # No hooks: they run lint and typecheck. Claude's file tools refuse paths outside the workspace and the images folder.
+          settings: '{"disableAllHooks": true, "permissions": {"blockReadsOutsideWorkingDirectories": true}}'
           # Sonnet does the work. A full model ID, so it changes only here.
           # acceptEdits, the action's strict mode for comment runs: edits inside the checkout, other commands only
-          # from --allowedTools. The default, auto, lets a safety review approve commands the list leaves out.
+          # from allow rules. The deny rules cover the pnpm commands .claude/settings.json allows, the files that
+          # change what format and codegen run, and .git: its config holds the token, and its hooks run on commit.
           claude_args: |
             --model claude-sonnet-5-5
             --max-turns 40
             --permission-mode acceptEdits
-            --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
-            --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
-            --append-system-prompt "This runner has no Postgres and no Playwright browsers: run lint, typecheck and unit tests, and leave database and e2e tests to CI."
+            --add-dir /tmp/github-images
+            --allowedTools "Bash(pnpm format),Bash(pnpm codegen)"
+            --disallowedTools "Bash(pnpm lint*),Bash(pnpm typecheck*),Bash(pnpm test*),Bash(pnpm --filter*),Read(./.git/**),Read(//proc/**),Edit(./.git/**),Edit(**/package.json),Edit(**/.npmrc),Edit(./pnpm-workspace.yaml),Edit(./codegen.ts),Edit(./.oxfmtrc.json),Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
+            --append-system-prompt "You can't run lint, typecheck or tests here: CI runs every check after you push, and asks you to fix a failure. Run pnpm format before you commit, and pnpm codegen after changing the GraphQL schema or queries. If the work needs a change to package.json, .npmrc, pnpm-workspace.yaml, codegen.ts or .oxfmtrc.json, don't make it; explain in your comment why it's needed."

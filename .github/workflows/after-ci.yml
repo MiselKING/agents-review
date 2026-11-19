@@ -113,22 +113,32 @@ jobs:
             | xargs -0 -r rm -f --
           find . -path ./.git -prune -o -type l -print0 | xargs -0 -r rm -f --
       # Anyone can comment on a public repo, so Claude gets only text written by people with write access, and our bots' reviews.
-      - name: Collect the PR's context
+      - id: context
+        name: Collect the PR's context
         timeout-minutes: 2
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ needs.pr.outputs.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           trusted='["OWNER","MEMBER","COLLABORATOR"]'
           bots='["claude[bot]","github-actions[bot]"]'
           omitted='(left out: the author has no write access)'
           mkdir pr-context
+          # `gh pr diff` shows the PR's current head; checked after the read, so the diff matches the files in pr-head/.
           gh pr diff "$PR" --repo "$REPO" > pr-context/diff.patch
+          if [ "$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)" != "$HEAD_SHA" ]; then
+            echo "::notice::The PR has moved past the commit CI tested; the newer commit gets its own review after its CI."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gh api "repos/$REPO/pulls/$PR" | jq --argjson trusted "$trusted" --arg omitted "$omitted" \
             'if (.author_association | IN($trusted[])) then {number, title, body} else {number, title: $omitted, body: $omitted} end' \
             > pr-context/pr.json
-          gh pr view "$PR" --repo "$REPO" --json closingIssuesReferences --jq '.closingIssuesReferences[].number' \
+          # Only this repo's issues: a PR can close an issue elsewhere that has the same number as one here.
+          gh pr view "$PR" --repo "$REPO" --json closingIssuesReferences \
+            | jq -r --arg repo "$REPO" '.closingIssuesReferences[] | select("\(.repository.owner.login)/\(.repository.name)" == $repo) | .number' \
             | while read -r issue; do gh api "repos/$REPO/issues/$issue"; done \
             | jq -s --argjson trusted "$trusted" --arg omitted "$omitted" \
               '[.[] | if (.author_association | IN($trusted[])) then {number, title, body} else {number, title: $omitted, body: $omitted} end]' \
@@ -140,6 +150,7 @@ jobs:
           gh api --paginate "repos/$REPO/issues/$PR/comments" | jq -s --argjson bots "$bots" \
             '[.[][] | select(.user.login | IN($bots[])) | {created_at, body}]' > pr-context/bot-comments.json
       - id: claude
+        if: ${{ steps.context.outputs.stale != 'true' }}
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
         timeout-minutes: 20
         with:
