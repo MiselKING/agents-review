@@ -1,14 +1,14 @@
-name: Ready check
-# Named before the job runs, so a PR that was already ready still shows "Ready check · #N".
+name: PR mark ready
+# Named before the job runs, so a PR that was already ready still shows "PR mark ready · #N".
 run-name: >-
   ${{
-    github.event.workflow_run.event != 'pull_request' && format('Ready check · push to {0} (skipped)', github.event.workflow_run.head_branch)
-    || github.event.workflow_run.conclusion != 'success' && format('Ready check · {0} CI {1} (skipped)', github.event.workflow_run.pull_requests[0].number && format('#{0}', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_branch || github.event.workflow_run.id, github.event.workflow_run.conclusion)
-    || github.event.workflow_run.head_repository.full_name != github.repository && format('Ready check · {0} fork (skipped)', github.event.workflow_run.pull_requests[0].number && format('#{0}', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_branch || github.event.workflow_run.id)
-    || format('Ready check · {0}', github.event.workflow_run.pull_requests[0].number && format('#{0}', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_branch || github.event.workflow_run.id)
+    github.event.workflow_run.event != 'pull_request' && format('PR mark ready · push to {0} (skipped)', github.event.workflow_run.head_branch)
+    || github.event.workflow_run.conclusion != 'success' && format('PR mark ready · {0} CI {1} (skipped)', github.event.workflow_run.pull_requests[0].number && format('#{0}', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_branch || github.event.workflow_run.id, github.event.workflow_run.conclusion)
+    || github.event.workflow_run.head_repository.full_name != github.repository && format('PR mark ready · {0} fork (skipped)', github.event.workflow_run.pull_requests[0].number && format('#{0}', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_branch || github.event.workflow_run.id)
+    || format('PR mark ready · {0}', github.event.workflow_run.pull_requests[0].number && format('#{0}', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_branch || github.event.workflow_run.id)
   }}
 
-# CI passed on a draft PR: mark it ready for review, which starts the reviews (claude-review.yml).
+# CI passed on a draft PR: mark it ready for review, which starts the reviews (pr-review.yml).
 on:
   workflow_run:
     workflows: [CI]

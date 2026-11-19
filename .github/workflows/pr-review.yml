@@ -1,15 +1,15 @@
-name: AI review
+name: PR review
 run-name: >-
   ${{
-    github.event.pull_request.draft && format('Review · #{0} draft (skipped)', github.event.pull_request.number)
-    || format('Review · #{0} ({1})', github.event.pull_request.number,
+    github.event.pull_request.draft && format('PR review · #{0} draft (skipped)', github.event.pull_request.number)
+    || format('PR review · #{0} ({1})', github.event.pull_request.number,
          github.event.action == 'synchronize' && 'new commits'
          || github.event.action == 'ready_for_review' && 'marked ready'
          || github.event.action)
   }}
 
 # On every push to a ready (non-draft) PR, once CI passes: Claude reviews it, then CodeRabbit is asked to.
-# Drafts wait: pr-ready.yml marks a draft ready after its CI passes, and that starts this workflow.
+# Drafts wait: pr-mark-ready.yml marks a draft ready after its CI passes, and that starts this workflow.
 on:
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -18,7 +18,7 @@ permissions: {}
 
 # A newer push replaces a review that is still waiting or running.
 concurrency:
-  group: review-${{ github.event.pull_request.number }}
+  group: pr-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -90,7 +90,7 @@ jobs:
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          file=.github/workflows/claude-review.yml
+          file=.github/workflows/pr-review.yml
           git fetch --depth=1 origin "$DEFAULT_BRANCH"
           if git diff --quiet FETCH_HEAD -- "$file"; then
             echo "same=true" >> "$GITHUB_OUTPUT"
@@ -113,7 +113,7 @@ jobs:
             exit 0
           fi
           gh pr comment "$PR" --repo "$REPO" --body "$marker
-          **No Claude review on this PR.** It changes \`.github/workflows/claude-review.yml\`, and Claude's workflows only run as they are on the default branch. CodeRabbit still reviews it; review the workflow change yourself."
+          **No Claude review on this PR.** It changes \`.github/workflows/pr-review.yml\`, and Claude's workflows only run as they are on the default branch. CodeRabbit still reviews it; review the workflow change yourself."
       # No `github_token` input: the action comments as the Claude GitHub App.
       - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
         if: ${{ steps.ci.outputs.passed == 'true' && steps.workflow.outputs.same == 'true' }}

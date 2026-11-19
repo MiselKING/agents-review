@@ -4,7 +4,7 @@ reviews:
   profile: chill
   poem: false
   sequence_diagrams: false
-  # Off because it can't wait for CI; .github/workflows/claude-review.yml asks for a review once CI passes.
+  # Off because it can't wait for CI; .github/workflows/pr-review.yml asks for a review once CI passes.
   auto_review:
     enabled: false
   # Exclusions only: an include pattern would limit the review to matching files.
