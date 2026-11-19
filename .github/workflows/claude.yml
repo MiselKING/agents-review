@@ -76,9 +76,12 @@ jobs:
           additional_permissions: |
             actions: read
           # Opus plans, Sonnet does the rest. Full model IDs, so a model changes only when this file does.
+          # acceptEdits, the action's strict mode for comment runs: edits inside the checkout, other commands only
+          # from --allowedTools. The default, auto, lets a safety review approve commands the list leaves out.
           claude_args: |
             --model ${{ startsWith(github.event.comment.body, '@claude plan') && 'claude-opus-5-5' || 'claude-sonnet-5-5' }}
             --max-turns 40
+            --permission-mode acceptEdits
             --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
             --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
             --append-system-prompt "If the comment that triggered you starts with @claude plan, reply with an implementation plan only: the files you would change, the order of steps, the tests you would add, and open questions. Do not edit files, create a branch or commit. Otherwise do what the comment asks. This runner has no Postgres and no Playwright browsers: run lint, typecheck and unit tests, and leave database and e2e tests to CI."
