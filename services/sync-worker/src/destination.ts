@@ -41,7 +41,7 @@ export function parseRetryAfter(header: string | null, now: Date): number {
     ? Number(header)
     : Math.ceil((Date.parse(header) - now.getTime()) / 1000);
   if (!Number.isFinite(seconds)) return 1;
-  return Math.min(seconds, 1);
+  return Math.max(seconds, 1);
 }
 
 async function describe(response: Response): Promise<string> {
