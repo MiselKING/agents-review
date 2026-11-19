@@ -263,15 +263,24 @@ jobs:
             exit 0
           fi
           count=$(git rev-list --count "$HEAD_SHA..$fix")
-          # --no-renames lists both names of a renamed file, so a protected file can't be renamed away.
-          files=$(git diff --no-renames --name-only "$HEAD_SHA" "$fix")
+          # Every file any commit touches, not only the end result: a commit that edits a protected file is pushed
+          # even if a later one restores it. -z gives raw names (git quotes unusual ones, which would dodge the
+          # patterns), and --no-renames lists both names of a renamed file. A file, so a failed git log stops here.
+          git log --no-renames --format= --name-only -z "$HEAD_SHA..$fix" > "$dir/paths"
           needs_approval='(^|/)(AGENTS|CLAUDE)\.md$|^REVIEW\.md$|^\.(claude|github|devcontainer)/|^\.(mcp\.json|gitmodules)$|^pnpm-(workspace|lock)\.yaml$|(^|/)package\.json$|^packages/db/(src/schema\.ts$|drizzle/)|(^|/)\.env'
-          blocked=$(printf '%s\n' "$files" | grep -E "$needs_approval" || true)
-          if [ -n "$blocked" ]; then
+          test_files='\.test\.tsx?$|/e2e/'
+          files=() blocked=() tests=()
+          while IFS= read -r -d '' path; do
+            [ -n "$path" ] || continue
+            files+=("$path")
+            if [[ $path =~ $needs_approval ]]; then blocked+=("$path"); fi
+            if [[ $path =~ $test_files ]]; then tests+=("$path"); fi
+          done < <(sort -zu "$dir/paths")
+          # \x60 is a backtick: Markdown code formatting in the comment.
+          if [ "${#blocked[@]}" -gt 0 ]; then
             {
               echo "**No fix pushed.** The fix changes files that need your approval:"
-              # \x60 is a backtick: Markdown code formatting in the comment.
-              printf '%s\n' "$blocked" | sed 's/.*/- \x60&\x60/'
+              printf -- '- \x60%s\x60\n' "${blocked[@]}"
             } > "$result"
             exit 0
           fi
@@ -285,12 +294,13 @@ jobs:
             exit 0
           fi
           {
-            echo "**Pushed** $count commit(s), up to ${fix:0:7}. CI runs again on it. Changed:"
-            printf '%s\n' "$files" | sed 's/.*/- \x60&\x60/'
-            tests=$(printf '%s\n' "$files" | grep -E '\.test\.tsx?$|/e2e/' || true)
-            if [ -n "$tests" ]; then
+            echo "**Pushed** $count commit(s), up to ${fix:0:7}. CI runs again on it. Files the commits change:"
+            if [ "${#files[@]}" -gt 0 ]; then
+              printf -- '- \x60%s\x60\n' "${files[@]}"
+            fi
+            if [ "${#tests[@]}" -gt 0 ]; then
               echo
-              echo "**Check the test changes** before you merge: $(printf '%s\n' "$tests" | sed 's/.*/\x60&\x60/' | paste -sd ' ')"
+              echo "**Check the test changes** before you merge: $(printf '\x60%s\x60 ' "${tests[@]}")"
             fi
           } > "$result"
       - name: Put the result in the PR comment
