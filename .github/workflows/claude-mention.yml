@@ -1,10 +1,13 @@
 name: Claude mention
-# Every comment and review starts a run; those without `@claude` are named so they're easy to skip.
+# Every comment and review starts a run; those that start no job are named so they're easy to skip.
 run-name: >-
   ${{
-    !contains(github.event.comment.body || github.event.review.body, '@claude')
-      && format('Claude · #{0} no @claude (skipped)', github.event.issue.number || github.event.pull_request.number)
-    || startsWith(github.event.comment.body, '@claude plan')
+    (
+      !contains(github.event.comment.body || github.event.review.body, '@claude') ||
+      (github.event.comment.user.type || github.event.review.user.type) == 'Bot' ||
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association)
+    ) && format('Claude · #{0} (skipped)', github.event.issue.number || github.event.pull_request.number)
+    || startsWith(github.event.comment.body || github.event.review.body, '@claude plan')
       && format('Claude plan · #{0}', github.event.issue.number || github.event.pull_request.number)
     || format('Claude · #{0}', github.event.issue.number || github.event.pull_request.number)
   }}
@@ -15,10 +18,13 @@ run-name: >-
 # It also reads the issue or PR (title, description, earlier comments, diff),
 # so you don't need to repeat them.
 #
-# The appended system prompt (at the bottom) adds two rules to every run:
-# - `@claude plan` gets a plan only: no edits, no branch, no commit.
+# - `@claude plan` (the `plan` job): Opus replies with a plan and can't edit, commit or push.
 #   You approve the plan by adding the `agent` label (claude-build.yml).
-# - This runner has no Postgres or browsers, so database and e2e tests are left to CI.
+# - Anything else (the `claude` job): Sonnet does what the comment asks. This runner has
+#   no Postgres or browsers, so database and e2e tests are left to CI.
+#
+# Comments from bots and from people without access start no job. The action would refuse
+# them anyway, but only after checkout and install.
 on:
   # A new comment on an issue, or in a PR's Conversation tab.
   issue_comment:
@@ -38,13 +44,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  claude:
-    # The action itself also refuses users without write access, and bots.
+  plan:
+    # Keep the first three lines equal to the `claude` job's.
     if: >-
       ${{
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
+        contains(github.event.comment.body || github.event.review.body, '@claude') &&
+        (github.event.comment.user.type || github.event.review.user.type) != 'Bot' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association) &&
+        startsWith(github.event.comment.body || github.event.review.body, '@claude plan')
+      }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # The action trades this for the Claude GitHub App token it comments with.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        timeout-minutes: 2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The stop hook runs lint and typecheck, which need an install; a plan changes nothing.
+          settings: '{"disableAllHooks": true}'
+          # Opus plans. A full model ID, so it changes only here.
+          # dontAsk: anything not allowed is denied. The deny rules also cover the action's own git commands.
+          claude_args: |
+            --model claude-opus-5-5
+            --max-turns 30
+            --permission-mode dontAsk
+            --disallowedTools "Edit,Write,NotebookEdit,Bash(git add:*),Bash(git rm:*),Bash(git commit:*),Bash(git push:*)"
+            --append-system-prompt "Reply with an implementation plan only: the files you would change, the order of steps, the tests you would add, and open questions. You can't edit files, commit or push in this run."
+
+  claude:
+    if: >-
+      ${{
+        contains(github.event.comment.body || github.event.review.body, '@claude') &&
+        (github.event.comment.user.type || github.event.review.user.type) != 'Bot' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association) &&
+        !startsWith(github.event.comment.body || github.event.review.body, '@claude plan')
       }}
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -75,13 +116,13 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
-          # Opus plans, Sonnet does the rest. Full model IDs, so a model changes only when this file does.
+          # Sonnet does the work. A full model ID, so it changes only here.
           # acceptEdits, the action's strict mode for comment runs: edits inside the checkout, other commands only
           # from --allowedTools. The default, auto, lets a safety review approve commands the list leaves out.
           claude_args: |
-            --model ${{ startsWith(github.event.comment.body, '@claude plan') && 'claude-opus-5-5' || 'claude-sonnet-5-5' }}
+            --model claude-sonnet-5-5
             --max-turns 40
             --permission-mode acceptEdits
             --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
             --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
-            --append-system-prompt "If the comment that triggered you starts with @claude plan, reply with an implementation plan only: the files you would change, the order of steps, the tests you would add, and open questions. Do not edit files, create a branch or commit. Otherwise do what the comment asks. This runner has no Postgres and no Playwright browsers: run lint, typecheck and unit tests, and leave database and e2e tests to CI."
+            --append-system-prompt "This runner has no Postgres and no Playwright browsers: run lint, typecheck and unit tests, and leave database and e2e tests to CI."
