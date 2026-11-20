@@ -522,7 +522,7 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
       # The commit Claude worked from: the PR's head, or main's commit for a new branch.
-      - if: ${{ success() && !cancelled() && needs.check.outputs.has_patch == 'true' }}
+      - if: ${{ success() && !cancelled() && needs.check.result == 'success' && needs.check.outputs.has_patch == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 2
         with:
@@ -531,7 +531,7 @@ jobs:
           token: ${{ steps.app.outputs.token }}
       # Applying a patch only writes files. Nothing from the branch is installed or run here.
       - id: push
-        if: ${{ success() && !cancelled() && needs.check.outputs.has_patch == 'true' }}
+        if: ${{ success() && !cancelled() && needs.check.result == 'success' && needs.check.outputs.has_patch == 'true' }}
         name: Check, commit and push the changes
         timeout-minutes: 3
         env:
@@ -573,7 +573,8 @@ jobs:
             # isn't recreated. The push is a fast-forward, so the ruleset against force pushes doesn't apply.
             git push --quiet --force-with-lease="refs/heads/$BRANCH:$BASE_SHA" origin "HEAD:refs/heads/$BRANCH" \
               || fail "The changes were not published: the branch moved or was deleted while Claude worked. Ask again."
-            echo "url=$(gh api "repos/$REPO/commits/$(git rev-parse HEAD)" --jq .html_url)" >> "$GITHUB_OUTPUT"
+            # Built locally: no request after the push that a cancellation could interrupt.
+            echo "url=$SERVER_URL/$REPO/commit/$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           else
             # The attempt too: a re-run keeps the run id, and an earlier attempt may have pushed its branch already.
             branch="claude/issue-$NUMBER-$RUN_ID-$RUN_ATTEMPT"
@@ -598,6 +599,8 @@ jobs:
           SKIP: ${{ needs.work.outputs.skip }}
           RESULT: ${{ needs.work.outputs.result }}
           PUSHED_URL: ${{ steps.push.outputs.url }}
+          PUSH_OUTCOME: ${{ steps.push.outcome }}
+          BRANCHES_URL: ${{ github.server_url }}/${{ github.repository }}/branches
           REFUSED: ${{ needs.work.outputs.refused }}
           JOB_STATUS: ${{ job.status }}
           WORK_HAS_PATCH: ${{ needs.work.outputs.has_patch }}
@@ -615,16 +618,19 @@ jobs:
             elif [ -n "$REFUSED" ]; then
               if [ -n "$RESULT" ]; then jq -r .reply <<< "$RESULT"; echo; fi
               printf '%s ([run](%s))\n' "$REFUSED" "$RUN_URL"
-            elif [ -z "$PUSHED_URL" ] && { [ "$WORK_RESULT" = cancelled ] || [ "$CHECK_RESULT" = cancelled ] || [ "$JOB_STATUS" = cancelled ]; }; then
-              echo "The run was cancelled, and nothing was published. ([run]($RUN_URL))"
+            elif [ "$PUSH_OUTCOME" = cancelled ]; then
+              # Stopped in the middle of the push step: the push may have happened already.
+              echo "The run was cancelled while publishing, so the changes may already be on the branch: check $BRANCHES_URL. ([run]($RUN_URL))"
+            elif [ "$PUSH_OUTCOME" != success ] && { [ "$WORK_RESULT" = cancelled ] || [ "$CHECK_RESULT" = cancelled ] || [ "$JOB_STATUS" = cancelled ]; }; then
+              echo "The run was cancelled before publishing, and nothing was published. ([run]($RUN_URL))"
             elif [ "$WORK_RESULT" != success ] || [ -z "$RESULT" ]; then
               echo "Claude's run failed or gave no result. ([run]($RUN_URL))"
-            elif [ "$WORK_HAS_PATCH" = true ] && [ "$CHECK_HAS_PATCH" != true ]; then
+            elif [ "$WORK_HAS_PATCH" = true ] && { [ "$CHECK_RESULT" != success ] || [ "$CHECK_HAS_PATCH" != true ]; }; then
               jq -r .reply <<< "$RESULT"
               if [ "$CHECK_RESULT" = success ]; then
                 printf '\n\nNothing was published: no changes were left after codegen and format. ([run](%s))\n' "$RUN_URL"
               else
-                printf '\n\nThe changes were not published: the check job failed. ([run](%s))\n' "$RUN_URL"
+                printf '\n\nThe changes were not published: the check job failed before it finished. ([run](%s))\n' "$RUN_URL"
               fi
             else
               jq -r .reply <<< "$RESULT"
