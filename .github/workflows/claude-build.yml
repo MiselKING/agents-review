@@ -26,6 +26,27 @@ jobs:
     outputs:
       approved: ${{ steps.record.outputs.approved }}
     steps:
+      # The action checks this too, but only after the App has replied and the build's runners have started.
+      - name: Check who added the label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SENDER: ${{ github.event.sender.login }}
+          SENDER_TYPE: ${{ github.event.sender.type }}
+        run: |
+          if [ "$SENDER_TYPE" != User ]; then
+            echo "::error::The \`agent\` label was added by $SENDER, which is not a person."
+            exit 1
+          fi
+          # `permission` is admin, write, read or none; maintain counts as write and triage as read.
+          permission=$(gh api "repos/$REPO/collaborators/$SENDER/permission" --jq .permission)
+          case "$permission" in
+            admin | write) ;;
+            *)
+              echo "::error::$SENDER added the \`agent\` label without write access ($permission)."
+              exit 1
+              ;;
+          esac
       - id: record
         name: Record the issue at approval
         env:

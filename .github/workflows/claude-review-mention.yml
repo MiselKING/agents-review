@@ -6,14 +6,15 @@ run-name: >-
       (github.event.comment.user.type || github.event.review.user.type) == 'Bot' ||
       !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association)
     ) && format('Claude review mention · #{0} (skipped)', github.event.pull_request.number)
-    || format('Claude review mention · #{0}', github.event.pull_request.number)
+    || github.event.comment.id && format('Claude review mention · #{0} · comment {1}', github.event.pull_request.number, github.event.comment.id)
+    || format('Claude review mention · #{0} · review {1}', github.event.pull_request.number, github.event.review.id)
   }}
 
 # `@claude` in a PR review or in a comment on a line of the diff. GitHub runs these events as
 # the PR's merge commit, with the PR's copy of this file, and Claude's secrets are only for
-# `main`. So this run only signals: when it finishes, claude-mention.yml starts on `main`,
-# finds the comment through the API and checks it again. It holds no secrets and trusts
-# nothing from this run.
+# `main`. So this run only signals, with the comment's or review's id in its name: when it
+# finishes, claude-mention.yml starts on `main`, looks that id up through the API and checks
+# it again. A PR can change this file, so nothing from this run is trusted.
 on:
   pull_request_review:
     types: [submitted]

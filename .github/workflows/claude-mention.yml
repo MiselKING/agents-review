@@ -68,8 +68,10 @@ jobs:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
-  # The run that signalled is the PR's own code, so nothing from it is trusted: the comment is looked up
-  # through the API, by the person who triggered that run, within the 10 minutes before it.
+  # The run that signalled is the PR's own code, so nothing from it is trusted. Its name carries the id of
+  # the comment or review; that item is looked up through the API and must be by the person who triggered
+  # the run, on this PR, mention @claude, and be posted in the 5 minutes before the run, so an old id can't
+  # be replayed.
   find-review-mention:
     if: >-
       ${{
@@ -98,28 +100,42 @@ jobs:
           STARTED: ${{ github.event.workflow_run.created_at }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           LISTED_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          TITLE: ${{ github.event.workflow_run.display_title }}
         run: |
+          # Only the id is taken from the run's name, and only digits.
+          if [ "$EVENT" = pull_request_review_comment ]; then kind=comment; else kind=review; fi
+          if [[ ! "$TITLE" =~ \ $kind\ ([0-9]+)$ ]]; then
+            echo "::notice::The run's name doesn't name a $kind."
+            exit 0
+          fi
+          id=${BASH_REMATCH[1]}
           # A fork's PR isn't listed on the run, so look it up by its commit; claude-work.yml then explains it can't help.
           number=${LISTED_PR:-$(gh pr list --repo "$REPO" --state open --search "$HEAD_SHA" --json number --jq '.[0].number // empty')}
           if [ -z "$number" ]; then
             echo "::notice::No open PR at $HEAD_SHA."
             exit 0
           fi
-          if [ "$EVENT" = pull_request_review_comment ]; then
-            gh api --paginate "repos/$REPO/pulls/$number/comments" | jq -s '[.[][] | . + {at: .created_at}]' > "$RUNNER_TEMP/items.json"
+          if [ "$kind" = comment ]; then
+            item=$(gh api "repos/$REPO/pulls/comments/$id" 2>/dev/null) \
+              && jq '. + {at: .created_at, pr: (.pull_request_url | split("/") | last)}' <<< "$item" > "$RUNNER_TEMP/item.json"
           else
-            gh api --paginate "repos/$REPO/pulls/$number/reviews" | jq -s '[.[][] | . + {at: .submitted_at}]' > "$RUNNER_TEMP/items.json"
+            item=$(gh api "repos/$REPO/pulls/$number/reviews/$id" 2>/dev/null) \
+              && jq --arg pr "$number" '. + {at: .submitted_at, pr: $pr}' <<< "$item" > "$RUNNER_TEMP/item.json"
           fi
-          jq --arg actor "$ACTOR" --arg started "$STARTED" '
+          if [ ! -s "$RUNNER_TEMP/item.json" ]; then
+            echo "::notice::The $kind $id on #$number could not be read."
+            exit 0
+          fi
+          jq --arg actor "$ACTOR" --arg started "$STARTED" --arg pr "$number" '
             ($started | fromdateiso8601) as $end
-            | [.[] | select(
-                .at != null and .user.login == $actor and .user.type != "Bot"
+            | select(
+                .at != null and .pr == $pr and .user.login == $actor and .user.type != "Bot"
                 and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
                 and ((.body // "") | ascii_downcase | contains("@claude"))
-                and (.at | fromdateiso8601) <= $end and (.at | fromdateiso8601) >= $end - 600)]
-            | sort_by(.at) | last // empty' "$RUNNER_TEMP/items.json" > "$RUNNER_TEMP/found.json"
+                and (.at | fromdateiso8601) <= $end and (.at | fromdateiso8601) >= $end - 300)' \
+            "$RUNNER_TEMP/item.json" > "$RUNNER_TEMP/found.json"
           if [ ! -s "$RUNNER_TEMP/found.json" ]; then
-            echo "::notice::No @claude comment by $ACTOR on #$number in the 10 minutes before the run."
+            echo "::notice::The $kind $id isn't an @claude request by $ACTOR on #$number from the 5 minutes before the run."
             exit 0
           fi
           delimiter="REQUEST_$(openssl rand -hex 16)"
