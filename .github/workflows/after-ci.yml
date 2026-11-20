@@ -310,7 +310,7 @@ jobs:
           fi
           # `ci` only collects the other jobs' results; a cancelled or skipped job is not something to fix.
           jobs=$(gh run view "$RUN_ID" --repo "$REPO" --json jobs \
-            --jq'[.jobs[] | select(.conclusion == "failure" and .name != "ci") | .name] | join(", ")')
+            --jq '[.jobs[] | select(.conclusion == "failure" and .name != "ci") | .name] | join(", ")')
           if [ -z "$jobs" ]; then
             echo "No job failed apart from ci, so there is nothing to fix."
             exit 0
@@ -320,10 +320,11 @@ jobs:
   fix:
     needs: [pr, fix-check]
     if: ${{ needs.fix-check.outputs.jobs != '' }}
-    # One Claude run at a time per issue or PR, shared with claude-mention.yml and claude-build.yml.
+    # One Claude run at a time per issue or PR, shared with the other Claude workflows; `queue: max` keeps every waiting run.
     concurrency:
       group: claude-${{ needs.pr.outputs.number }}
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       issues: read
@@ -337,5 +338,6 @@ jobs:
       request: ${{ needs.fix-check.outputs.jobs }}
       ci_run_id: ${{ github.event.workflow_run.id }}
       head_sha: ${{ github.event.workflow_run.head_sha }}
-    # Environment secrets reach a called workflow only this way; each job there names its environment.
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

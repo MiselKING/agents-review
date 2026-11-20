@@ -16,10 +16,11 @@ permissions: {}
 jobs:
   build:
     if: ${{ github.event.label.name == 'agent' }}
-    # One Claude run at a time per issue or PR, shared with claude-mention.yml and after-ci.yml.
+    # One Claude run at a time per issue or PR, shared with the other Claude workflows; `queue: max` keeps every waiting run.
     concurrency:
       group: claude-${{ github.event.issue.number }}
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read
       issues: read
@@ -30,4 +31,6 @@ jobs:
       mode: work
       trigger: label
       number: ${{ github.event.issue.number }}
-    secrets: inherit
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

@@ -1,0 +1,38 @@
+name: Claude review mention
+run-name: >-
+  ${{
+    (
+      !contains(github.event.comment.body || github.event.review.body, '@claude') ||
+      (github.event.comment.user.type || github.event.review.user.type) == 'Bot' ||
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association)
+    ) && format('Claude review mention · #{0} (skipped)', github.event.pull_request.number)
+    || format('Claude review mention · #{0}', github.event.pull_request.number)
+  }}
+
+# `@claude` in a PR review or in a comment on a line of the diff. GitHub runs these events as
+# the PR's merge commit, with the PR's copy of this file, and Claude's secrets are only for
+# `main`. So this run only signals: when it finishes, claude-mention.yml starts on `main`,
+# finds the comment through the API and checks it again. It holds no secrets and trusts
+# nothing from this run.
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  signal:
+    if: >-
+      ${{
+        contains(github.event.comment.body || github.event.review.body, '@claude') &&
+        (github.event.comment.user.type || github.event.review.user.type) != 'Bot' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association)
+      }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Hand the request to claude-mention.yml
+        run: echo "claude-mention.yml picks this up on main."

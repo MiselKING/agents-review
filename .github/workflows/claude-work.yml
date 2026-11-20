@@ -44,6 +44,13 @@ on:
         description: For `ci-failure`, the commit CI tested.
         type: string
         default: ''
+    # Passed by name, not with `secrets: inherit`. Both live in environments, and a job here that names
+    # the environment gets the environment's copy.
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: false
+      APP_PRIVATE_KEY:
+        required: false
 
 permissions: {}
 
@@ -127,9 +134,10 @@ jobs:
             exit 0
           fi
           pr=$(gh api "repos/$REPO/pulls/$NUMBER")
+          # A fork's branch can't be pushed to, and its text comes from someone without write access.
           if [ "$(jq -r '.head.repo.full_name' <<< "$pr")" != "$REPO" ] || [ "$(jq -r .state <<< "$pr")" != open ]; then
-            echo "::error::Only open PRs from a branch in this repository can be worked on."
-            exit 1
+            echo "skip=Claude only works on open PRs from a branch in this repository." >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           sha=$(jq -r .head.sha <<< "$pr")
           if [ "$TRIGGER" = ci-failure ] && [ "$sha" != "$HEAD_SHA" ]; then
@@ -181,11 +189,19 @@ jobs:
           bots=$(jq -nc --arg app "$APP_BOT_LOGIN" '["claude[bot]", "github-actions[bot]", "coderabbitai[bot]", $app]')
           # shellcheck disable=SC2016 # $trusted and $bots are jq variables
           keep='select((.author_association | IN($trusted[])) or (.user.login | IN($bots[])))'
+          # A build follows the plan as it was when you added the label: later comments and edits are left out.
+          # Not creation time: a plan reply is an edit of an earlier "Working on it" comment.
+          approved=''
+          if [ "$TRIGGER" = label ]; then
+            approved=$(gh api --paginate "repos/$REPO/issues/$NUMBER/events" \
+              | jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty')
+          fi
           mkdir claude-context
           cd claude-context
           gh api "repos/$REPO/issues/$NUMBER" | jq '{number, title, body, author: .user.login, is_pr: (.pull_request != null)}' > issue.json
           gh api --paginate "repos/$REPO/issues/$NUMBER/comments" \
-            | jq -s --argjson trusted "$trusted" --argjson bots "$bots" "[.[][] | $keep | {author: .user.login, created_at, body}]" > comments.json
+            | jq -s --argjson trusted "$trusted" --argjson bots "$bots" --arg approved "$approved" \
+              "[.[][] | $keep | select(\$approved == \"\" or .updated_at <= \$approved) | {author: .user.login, created_at, body}]" > comments.json
           if [ "$(jq -r .is_pr issue.json)" = true ]; then
             gh pr diff "$NUMBER" --repo "$REPO" > diff.patch
             gh api --paginate "repos/$REPO/pulls/$NUMBER/reviews" \
@@ -209,7 +225,8 @@ jobs:
 
           Build this issue (`issue.json`).
 
-          1. Read the issue and every comment in `comments.json`. If a comment holds an implementation
+          1. Read the issue and every comment in `comments.json`: the comments as they were when the
+             maintainer added the `agent` label to approve. If a comment holds an implementation
              plan, the latest plan together with the maintainer's corrections after it is the approved
              plan: follow it, and where a correction disagrees with the plan, the correction wins. If
              there is no plan, build from the acceptance criteria.
@@ -310,7 +327,8 @@ jobs:
             --disallowedTools "${{ inputs.mode == 'plan' && 'Edit,Write,NotebookEdit,' || '' }}Bash,WebFetch,WebSearch,Read(./.git/**),Read(//proc/**),Edit(./.git/**),Edit(./claude-context/**)"
             --json-schema '{"type":"object","required":["reply","commit_message"],"properties":{"reply":{"type":"string"},"commit_message":{"type":"string"}}}'
       # Job outputs, not artifacts: artifacts on a public repo can be downloaded by others, and GitHub drops
-      # an output that holds a secret. Outputs are limited to 1 MB per job.
+      # an output that holds a secret. The next jobs read it from one environment variable, and Linux refuses
+      # a single one over 128 KiB, so the patch stays under 100,000 characters.
       - id: patch
         if: ${{ inputs.mode == 'work' && steps.claude.outcome == 'success' }}
         name: Save the changes as a patch
@@ -325,7 +343,7 @@ jobs:
             exit 0
           fi
           patch=$(gzip -9 < "$RUNNER_TEMP/changes.patch" | base64 -w0)
-          if [ "${#patch}" -gt 700000 ]; then
+          if [ "${#patch}" -gt 100000 ]; then
             echo "::error::The changes are too large to hand on (${#patch} bytes compressed); split the task."
             exit 1
           fi
@@ -387,7 +405,7 @@ jobs:
             exit 0
           fi
           patch=$(gzip -9 < "$RUNNER_TEMP/final.patch" | base64 -w0)
-          if [ "${#patch}" -gt 700000 ]; then
+          if [ "${#patch}" -gt 100000 ]; then
             echo "::error::The changes are too large to hand on (${#patch} bytes compressed); split the task."
             exit 1
           fi
@@ -459,6 +477,7 @@ jobs:
           RESULT: ${{ needs.work.outputs.result }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           RUN_ID: ${{ github.run_id }}
+          SERVER_URL: ${{ github.server_url }}
         run: |
           fail() { echo "$1" > "$RUNNER_TEMP/publish-error.md"; echo "::error::$1"; exit 1; }
           # GitHub drops a job output that holds a secret, so an empty patch here means it was dropped.
@@ -466,8 +485,10 @@ jobs:
           printf '%s' "$PATCH" | base64 -d | gunzip > "$RUNNER_TEMP/changes.patch"
           git apply --index "$RUNNER_TEMP/changes.patch" || fail "The changes don't apply to the commit Claude worked from."
           protected='^(\.github|\.claude|\.husky|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
-          refused=$(git diff --cached --no-renames --name-only | grep -E "$protected" || true)
-          [ -z "$refused" ] || fail "The changes were not published: they touch files agents may not change: $(echo "$refused" | paste -sd, -)."
+          # Raw names: git puts names with unusual characters in quotes otherwise, and those would slip past the check.
+          git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/paths" || fail "The changes were not published: the changed files could not be listed."
+          refused=$(grep -zE "$protected" "$RUNNER_TEMP/paths" | tr '\0' ',' || true)
+          [ -z "$refused" ] || fail "The changes were not published: they touch files agents may not change: ${refused%,}."
           # A symlink or submodule could point outside the repository.
           links=$(git diff --cached --no-renames --raw | awk '$2 ~ /^(120000|160000)$/ {print $NF}')
           [ -z "$links" ] || fail "The changes were not published: they add a symlink or submodule: $(echo "$links" | paste -sd, -)."
@@ -478,16 +499,20 @@ jobs:
           git -c user.name="$bot" -c user.email="$id+$bot@users.noreply.github.com" -c core.hooksPath=/dev/null \
             commit --quiet --no-verify -F "$RUNNER_TEMP/message.txt"
           if [ -n "$BRANCH" ]; then
-            # No force: if the branch moved while Claude worked, the push is refused.
-            git push --quiet origin "HEAD:refs/heads/$BRANCH" \
-              || fail "The changes were not published: the branch moved while Claude worked. Ask again."
+            # Only if the branch is still where Claude started, so a moved branch isn't overwritten and a deleted one
+            # isn't recreated. The push is a fast-forward, so the ruleset against force pushes doesn't apply.
+            git push --quiet --force-with-lease="refs/heads/$BRANCH:$BASE_SHA" origin "HEAD:refs/heads/$BRANCH" \
+              || fail "The changes were not published: the branch moved or was deleted while Claude worked. Ask again."
             echo "url=$(gh api "repos/$REPO/commits/$(git rev-parse HEAD)" --jq .html_url)" >> "$GITHUB_OUTPUT"
           else
             branch="claude/issue-$NUMBER-$RUN_ID"
-            git push --quiet origin "HEAD:refs/heads/$branch"
+            # Only as a new branch: never on top of one that already exists.
+            git push --quiet --force-with-lease="refs/heads/$branch:" origin "HEAD:refs/heads/$branch" \
+              || fail "The changes were not published: the branch $branch could not be created."
             title=$(head -n 1 "$RUNNER_TEMP/message.txt")
             { printf 'Closes #%s\n\n' "$NUMBER"; jq -r .reply <<< "$RESULT"; } > "$RUNNER_TEMP/pr-body.md"
-            url=$(gh pr create --repo "$REPO" --draft --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md")
+            url=$(gh pr create --repo "$REPO" --draft --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md") \
+              || fail "The changes are on the branch \`$branch\`, but the draft PR could not be opened. Open it from $SERVER_URL/$REPO/compare/main...$branch?expand=1"
             echo "url=$url" >> "$GITHUB_OUTPUT"
           fi
       - name: Post Claude's reply

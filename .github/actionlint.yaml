@@ -2,3 +2,9 @@
 self-hosted-runner:
   labels:
     - ubuntu-26.04
+# It also predates the `queue` key of `concurrency`, so it can't check that key; GitHub rejects a bad value.
+# Remove this once a newer actionlint knows it.
+paths:
+  .github/workflows/**/*.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
