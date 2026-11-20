@@ -1,12 +1,15 @@
-name: Claude build
+name: Claude label
 run-name: >-
   ${{
-    github.event.label.name == 'agent' && format('Claude build · #{0}', github.event.issue.number)
-    || format('Claude build · #{0} label {1} (skipped)', github.event.issue.number, github.event.label.name)
+    github.event.label.name == 'agent:build' && format('Claude build · #{0}', github.event.issue.number)
+    || github.event.label.name == 'agent:plan' && format('Claude plan · #{0}', github.event.issue.number)
+    || format('Claude label · #{0} label {1} (skipped)', github.event.issue.number, github.event.label.name)
   }}
 
-# The `agent` label on an issue: Claude builds it from the approved plan, and the App opens
-# the draft PR. The work happens in claude-work.yml.
+# The `agent:` labels on an issue start Claude. The work happens in claude-work.yml.
+# - `agent:plan`: Claude replies with a plan and changes nothing, like an `@claude plan` comment. The
+#   label is removed when the run starts, so adding it again asks for a new plan.
+# - `agent:build`: Claude builds the issue from the approved plan, and the App opens the draft PR.
 on:
   issues:
     types: [labeled]
@@ -14,11 +17,11 @@ on:
 permissions: {}
 
 jobs:
-  # The label is your approval of the issue, its title, description and comments as they were when you added
-  # it. The build may wait for another Claude run first, so this records them right away; claude-work.yml
-  # builds only if none of them changed or was deleted after the label.
-  approve:
-    if: ${{ github.event.label.name == 'agent' }}
+  # A build label is your approval of the issue, its title, description and comments as they were when you
+  # added it. The build may wait for another Claude run first, so this records them right away;
+  # claude-work.yml builds only if none of them changed or was deleted after the label.
+  check:
+    if: ${{ github.event.label.name == 'agent:plan' || github.event.label.name == 'agent:build' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 2
     permissions:
@@ -26,16 +29,17 @@ jobs:
     outputs:
       approved: ${{ steps.record.outputs.approved }}
     steps:
-      # The action checks this too, but only after the App has replied and the build's runners have started.
+      # The action checks this too, but only after the App has replied and the runners have started.
       - name: Check who added the label
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          LABEL: ${{ github.event.label.name }}
           SENDER: ${{ github.event.sender.login }}
           SENDER_TYPE: ${{ github.event.sender.type }}
         run: |
           if [ "$SENDER_TYPE" != User ]; then
-            echo "::error::The \`agent\` label was added by $SENDER, which is not a person."
+            echo "::error::The \`$LABEL\` label was added by $SENDER, which is not a person."
             exit 1
           fi
           # `permission` is admin, write, read or none; maintain counts as write and triage as read.
@@ -43,11 +47,12 @@ jobs:
           case "$permission" in
             admin | write) ;;
             *)
-              echo "::error::$SENDER added the \`agent\` label without write access ($permission)."
+              echo "::error::$SENDER added the \`$LABEL\` label without write access ($permission)."
               exit 1
               ;;
           esac
       - id: record
+        if: ${{ github.event.label.name == 'agent:build' }}
         name: Record the issue at approval
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,9 +69,9 @@ jobs:
           gh api --paginate "repos/$REPO/issues/$NUMBER/events" > "$RUNNER_TEMP/events.json"
           gh api --paginate "repos/$REPO/issues/$NUMBER/comments" > "$RUNNER_TEMP/comments.json"
           # This job starts a few seconds after the label, so comments are compared with the label's own time.
-          labeled_at=$(jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty' \
+          labeled_at=$(jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent:build")] | last | .created_at // empty' \
             "$RUNNER_TEMP/events.json")
-          [ -n "$labeled_at" ] || { echo "::error::No \`agent\` label event on #$NUMBER."; exit 1; }
+          [ -n "$labeled_at" ] || { echo "::error::No \`agent:build\` label event on #$NUMBER."; exit 1; }
           # Comments posted after the label are left out. claude-work.yml stops on any edited after it.
           approved=$(jq -s -c --arg issue "$issue" --arg at "$labeled_at" \
             '{issue: $issue, labeled_at: $at,
@@ -80,8 +85,8 @@ jobs:
           fi
           echo "approved=$approved" >> "$GITHUB_OUTPUT"
 
-  build:
-    needs: approve
+  claude:
+    needs: check
     # One Claude run at a time per issue or PR, shared with the other Claude workflows; `queue: max` keeps every waiting run.
     concurrency:
       group: claude-${{ github.event.issue.number }}
@@ -94,10 +99,10 @@ jobs:
       actions: read
     uses: ./.github/workflows/claude-work.yml
     with:
-      mode: work
+      mode: ${{ github.event.label.name == 'agent:plan' && 'plan' || 'work' }}
       trigger: label
       number: ${{ github.event.issue.number }}
-      approved: ${{ needs.approve.outputs.approved }}
+      approved: ${{ needs.check.outputs.approved }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

@@ -74,4 +74,4 @@ Anything that fits no key goes in Notes, or for a visual change, in What should 
 5. **Show the draft:** title, labels and the full body, plus which acceptance criteria you proposed. Wait for approval. Apply the user's edits and show it again until they approve.
 6. **Create it.** Write the body to a temporary file outside the repo, run `gh issue create --title "<title>" --label "<label>" --body-file <file>`, then delete the file and reply with the issue URL.
    - Use only the labels in the form's `labels:` list.
-   - Never add the `agent` label. The user adds it when the issue is ready for an agent.
+   - Never add an `agent:` label (`agent:plan`, `agent:build`). They start Claude, so only the user adds them.

@@ -18,8 +18,8 @@ run-name: >-
 # issue or PR, the comments by people with write access, and for a PR its diff, so you don't
 # need to repeat them.
 #
-# - `@claude plan`: Opus replies with a plan and changes nothing. You approve the plan by
-#   adding the `agent` label (claude-build.yml).
+# - `@claude plan`: Opus replies with a plan and changes nothing, like the `agent:plan` label.
+#   You approve the plan by adding the `agent:build` label (claude-label.yml).
 # - Anything else: Sonnet does what the comment asks, a job with no secrets runs the checks,
 #   and the App commits the changes to the PR's branch, or opens a draft PR for an issue.
 #
