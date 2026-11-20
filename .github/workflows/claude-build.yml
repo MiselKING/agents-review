@@ -14,8 +14,31 @@ on:
 permissions: {}
 
 jobs:
-  build:
+  # The label is your approval of the issue and its comments as they are now. The build may wait for
+  # another Claude run first, so this records them right away; claude-work.yml builds only if none of
+  # them changed or was deleted meanwhile.
+  approve:
     if: ${{ github.event.label.name == 'agent' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 2
+    permissions:
+      issues: read
+    outputs:
+      comments: ${{ steps.record.outputs.comments }}
+    steps:
+      - id: record
+        name: Record the comments at approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          comments=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" \
+            | jq -s -c '[.[][] | {id, updated_at, html_url, author_association, user: {login: .user.login}}]')
+          echo "comments=$comments" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: approve
     # One Claude run at a time per issue or PR, shared with the other Claude workflows; `queue: max` keeps every waiting run.
     concurrency:
       group: claude-${{ github.event.issue.number }}
@@ -31,6 +54,7 @@ jobs:
       mode: work
       trigger: label
       number: ${{ github.event.issue.number }}
+      approved: ${{ needs.approve.outputs.comments }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

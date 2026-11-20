@@ -44,6 +44,12 @@ on:
         description: For `ci-failure`, the commit CI tested.
         type: string
         default: ''
+      approved:
+        description: >-
+          For `label`, the issue's comments as they were when the label was added: a JSON array of
+          id, updated_at, html_url, author_association and user.login, from claude-build.yml.
+        type: string
+        default: ''
     # Passed by name, not with `secrets: inherit`. Both live in environments, and a job here that names
     # the environment gets the environment's copy.
     secrets:
@@ -89,10 +95,21 @@ jobs:
             echo "::error::The repository variable APP_BOT_LOGIN must be '${APP_SLUG}[bot]' (it is '$APP_BOT_LOGIN')."
             exit 1
           fi
+          # One automatic fix per PR. after-ci.yml checks this before the fix waits in the queue; this checks
+          # again once it runs, so fixes queued behind each other don't all run. Only the App's comments and
+          # yours count, so a pasted marker can't block a fix.
+          if [ "$TRIGGER" = ci-failure ]; then
+            marked=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" | jq -s -r --arg app "$APP_BOT_LOGIN" \
+              '.[][] | select(.user.login == $app or (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))) | .body')
+            if printf '%s\n' "$marked" | grep -qF '<!-- claude-ci-fix -->'; then
+              echo "::notice::#$NUMBER already had its automatic fix."
+              exit 0
+            fi
+          fi
           {
             if [ "$MODE" = plan ]; then echo "Claude is writing a plan. ([run]($RUN_URL))"
             else echo "Claude is working on it. ([run]($RUN_URL))"; fi
-            # after-ci.yml finds this marker to allow only one automatic fix per PR.
+            # This marker is what the check above, and after-ci.yml, look for.
             if [ "$TRIGGER" = ci-failure ]; then printf '\n<!-- claude-ci-fix -->\n'; fi
           } > "$RUNNER_TEMP/ack.md"
           id=$(gh api --method POST "repos/$REPO/issues/$NUMBER/comments" -F "body=@$RUNNER_TEMP/ack.md" --jq .id)
@@ -100,6 +117,8 @@ jobs:
 
   work:
     needs: ack
+    # No comment means ack stopped: the PR already had its automatic fix.
+    if: ${{ needs.ack.outputs.comment_id != '' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     environment: claude
@@ -110,7 +129,7 @@ jobs:
       pull-requests: read
       actions: read
     outputs:
-      skip: ${{ steps.target.outputs.skip }}
+      skip: ${{ steps.target.outputs.skip || steps.context.outputs.skip }}
       branch: ${{ steps.target.outputs.branch }}
       base_sha: ${{ steps.target.outputs.base_sha }}
       result: ${{ steps.claude.outputs.structured_output }}
@@ -171,7 +190,8 @@ jobs:
           echo '/claude-context/' >> .git/info/exclude
       # Anyone can comment on a public repo, so Claude gets comments only from people with write access
       # and from the bots you installed. The issue or PR itself is included: you chose to run Claude on it.
-      - name: Collect the context
+      - id: context
+        name: Collect the context
         if: ${{ steps.target.outputs.skip == '' }}
         timeout-minutes: 3
         env:
@@ -183,25 +203,43 @@ jobs:
           REQUEST: ${{ inputs.request }}
           LOCATION: ${{ inputs.location }}
           CI_RUN_ID: ${{ inputs.ci_run_id }}
+          APPROVED: ${{ inputs.approved }}
           APP_BOT_LOGIN: ${{ vars.APP_BOT_LOGIN }}
         run: |
           trusted='["OWNER","MEMBER","COLLABORATOR"]'
           bots=$(jq -nc --arg app "$APP_BOT_LOGIN" '["claude[bot]", "github-actions[bot]", "coderabbitai[bot]", $app]')
           # shellcheck disable=SC2016 # $trusted and $bots are jq variables
           keep='select((.author_association | IN($trusted[])) or (.user.login | IN($bots[])))'
-          # A build follows the plan as it was when you added the label: later comments and edits are left out.
-          # Not creation time: a plan reply is an edit of an earlier "Working on it" comment.
-          approved=''
-          if [ "$TRIGGER" = label ]; then
-            approved=$(gh api --paginate "repos/$REPO/issues/$NUMBER/events" \
-              | jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty')
-          fi
           mkdir claude-context
           cd claude-context
-          gh api "repos/$REPO/issues/$NUMBER" | jq '{number, title, body, author: .user.login, is_pr: (.pull_request != null)}' > issue.json
-          gh api --paginate "repos/$REPO/issues/$NUMBER/comments" \
-            | jq -s --argjson trusted "$trusted" --argjson bots "$bots" --arg approved "$approved" \
-              "[.[][] | $keep | select(\$approved == \"\" or .updated_at <= \$approved) | {author: .user.login, created_at, body}]" > comments.json
+          gh api "repos/$REPO/issues/$NUMBER" > "$RUNNER_TEMP/issue.json"
+          jq '{number, title, body, author: .user.login, is_pr: (.pull_request != null)}' "$RUNNER_TEMP/issue.json" > issue.json
+          gh api --paginate "repos/$REPO/issues/$NUMBER/comments" | jq -s '[.[][]]' > "$RUNNER_TEMP/comments.json"
+          if [ "$TRIGGER" = label ]; then
+            # A build follows the issue as you approved it: the comments as they were when you added the label,
+            # recorded by claude-build.yml before the build waited for its turn. If one of those changed or was
+            # deleted since, nothing is built: you approve again.
+            [ -n "$APPROVED" ] || { echo "::error::No record of the comments at approval."; exit 1; }
+            if ! jq -e '[.labels[].name] | index("agent")' "$RUNNER_TEMP/issue.json" > /dev/null; then
+              echo "skip=The \`agent\` label was removed before the build started." >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            printf '%s' "$APPROVED" > "$RUNNER_TEMP/approved.json"
+            changed=$(jq -r --slurpfile approved "$RUNNER_TEMP/approved.json" --argjson trusted "$trusted" --argjson bots "$bots" "
+              (map({key: (.id | tostring), value: .updated_at}) | from_entries) as \$now
+              | [\$approved[0][] | $keep | select(\$now[.id | tostring] != .updated_at) | .html_url] | join(\", \")" \
+              "$RUNNER_TEMP/comments.json")
+            if [ -n "$changed" ]; then
+              echo "skip=A comment changed or was deleted after you added the \`agent\` label ($changed). Remove the label and add it again to approve the issue as it is now." >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            # Comments posted after the approval are left out.
+            jq --slurpfile approved "$RUNNER_TEMP/approved.json" '[$approved[0][].id] as $ids | map(select(.id | IN($ids[])))' \
+              "$RUNNER_TEMP/comments.json" > "$RUNNER_TEMP/approved-comments.json"
+            mv "$RUNNER_TEMP/approved-comments.json" "$RUNNER_TEMP/comments.json"
+          fi
+          jq --argjson trusted "$trusted" --argjson bots "$bots" "[.[] | $keep | {author: .user.login, created_at, body}]" \
+            "$RUNNER_TEMP/comments.json" > comments.json
           if [ "$(jq -r .is_pr issue.json)" = true ]; then
             gh pr diff "$NUMBER" --repo "$REPO" > diff.patch
             gh api --paginate "repos/$REPO/pulls/$NUMBER/reviews" \
@@ -290,7 +328,7 @@ jobs:
       # Code's sandbox can't start on these runners (tested in #51), so the checks run in `check`, which
       # holds no secrets.
       - id: claude
-        if: ${{ steps.target.outputs.skip == '' }}
+        if: ${{ steps.target.outputs.skip == '' && steps.context.outputs.skip == '' }}
         uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
         timeout-minutes: 35
         with:
@@ -439,7 +477,7 @@ jobs:
 
   publish:
     needs: [ack, work, check]
-    if: ${{ !cancelled() && needs.ack.result == 'success' }}
+    if: ${{ !cancelled() && needs.ack.result == 'success' && needs.ack.outputs.comment_id != '' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment: publish
@@ -499,6 +537,8 @@ jobs:
           git -c user.name="$bot" -c user.email="$id+$bot@users.noreply.github.com" -c core.hooksPath=/dev/null \
             commit --quiet --no-verify -F "$RUNNER_TEMP/message.txt"
           if [ -n "$BRANCH" ]; then
+            [ "$(gh api "repos/$REPO/pulls/$NUMBER" --jq .state)" = open ] \
+              || fail "The changes were not published: the PR was closed while Claude worked."
             # Only if the branch is still where Claude started, so a moved branch isn't overwritten and a deleted one
             # isn't recreated. The push is a fast-forward, so the ruleset against force pushes doesn't apply.
             git push --quiet --force-with-lease="refs/heads/$BRANCH:$BASE_SHA" origin "HEAD:refs/heads/$BRANCH" \

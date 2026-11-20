@@ -115,7 +115,7 @@ jobs:
             | [.[] | select(
                 .at != null and .user.login == $actor and .user.type != "Bot"
                 and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
-                and ((.body // "") | contains("@claude"))
+                and ((.body // "") | ascii_downcase | contains("@claude"))
                 and (.at | fromdateiso8601) <= $end and (.at | fromdateiso8601) >= $end - 600)]
             | sort_by(.at) | last // empty' "$RUNNER_TEMP/items.json" > "$RUNNER_TEMP/found.json"
           if [ ! -s "$RUNNER_TEMP/found.json" ]; then
@@ -125,7 +125,8 @@ jobs:
           delimiter="REQUEST_$(openssl rand -hex 16)"
           {
             echo "number=$number"
-            echo "mode=$(jq -r 'if (.body | startswith("@claude plan")) then "plan" else "work" end' "$RUNNER_TEMP/found.json")"
+            # Ignoring case, like GitHub's contains() and startsWith() in the other route and in the signal.
+            echo "mode=$(jq -r 'if (.body | ascii_downcase | startswith("@claude plan")) then "plan" else "work" end' "$RUNNER_TEMP/found.json")"
             echo "location=$(jq -r 'if .path then "\(.path):\(.line // .original_line)" else "" end' "$RUNNER_TEMP/found.json")"
             echo "request<<$delimiter"
             jq -r .body "$RUNNER_TEMP/found.json"
