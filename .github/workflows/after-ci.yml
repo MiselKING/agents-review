@@ -88,6 +88,7 @@ jobs:
       issues: read
     outputs:
       review: ${{ steps.claude.outputs.structured_output }}
+      stale: ${{ steps.context.outputs.stale }}
     steps:
       # main at the root, so the rules and .claude/ that Claude loads are main's (the action's docs for workflow_run).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -242,7 +243,8 @@ jobs:
         !cancelled() &&
         github.event.workflow_run.conclusion == 'success' &&
         needs.pr.outputs.number != '' &&
-        needs.claude-review.result != 'cancelled'
+        needs.claude-review.result != 'cancelled' &&
+        needs.claude-review.outputs.stale != 'true'
       }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
