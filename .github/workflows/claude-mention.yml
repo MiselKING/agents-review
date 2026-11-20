@@ -1,87 +1,191 @@
 name: Claude mention
-# Every comment and review starts a run; those without `@claude` are named so they're easy to skip.
+# Every comment starts a run; those that start no job are named so they're easy to skip.
 run-name: >-
   ${{
-    !contains(github.event.comment.body || github.event.review.body, '@claude')
-      && format('Claude · #{0} no @claude (skipped)', github.event.issue.number || github.event.pull_request.number)
-    || startsWith(github.event.comment.body, '@claude plan')
-      && format('Claude plan · #{0}', github.event.issue.number || github.event.pull_request.number)
-    || format('Claude · #{0}', github.event.issue.number || github.event.pull_request.number)
+    github.event_name == 'workflow_run' && format('Claude · review mention ({0})', github.event.workflow_run.triggering_actor.login)
+    || (
+      !contains(github.event.comment.body, '@claude') ||
+      github.event.comment.user.type == 'Bot' ||
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    ) && format('Claude · #{0} (skipped)', github.event.issue.number)
+    || startsWith(github.event.comment.body, '@claude plan') && format('Claude plan · #{0}', github.event.issue.number)
+    || format('Claude · #{0}', github.event.issue.number)
   }}
 
-# Runs whenever an issue comment, PR comment or PR review mentions `@claude`.
+# Runs when a comment mentions `@claude`.
 #
-# Your comment is the task: Claude works out what to do from what you wrote.
-# It also reads the issue or PR (title, description, earlier comments, diff),
-# so you don't need to repeat them.
+# Your comment is the task: Claude works out what to do from what you wrote. It also reads the
+# issue or PR, the comments by people with write access, and for a PR its diff, so you don't
+# need to repeat them.
 #
-# The appended system prompt (at the bottom) adds two rules to every run:
-# - `@claude plan` gets a plan only: no edits, no branch, no commit.
-#   You approve the plan by adding the `agent` label (claude-build.yml).
-# - This runner has no Postgres or browsers, so database and e2e tests are left to CI.
+# - `@claude plan`: Opus replies with a plan and changes nothing. You approve the plan by
+#   adding the `agent` label (claude-build.yml).
+# - Anything else: Sonnet does what the comment asks, a job with no secrets runs the checks,
+#   and the App commits the changes to the PR's branch, or opens a draft PR for an issue.
+#
+# A comment on an issue or in a PR's Conversation tab starts this directly. A PR review or a
+# comment on a line of the diff starts claude-review-mention.yml, which runs as the PR and so
+# gets no secrets; this workflow then starts on `main` and finds that comment itself.
+# The work happens in claude-work.yml. Comments from bots and from people without write
+# access start no job.
 on:
-  # A new comment on an issue, or in a PR's Conversation tab.
   issue_comment:
     types: [created]
-  # A new comment on a line in a PR's Files changed tab.
-  pull_request_review_comment:
-    types: [created]
-  # A submitted PR review; its summary text can mention @claude.
-  pull_request_review:
-    types: [submitted]
+  workflow_run:
+    workflows: [Claude review mention]
+    types: [completed]
 
 permissions: {}
 
-# One run at a time per issue or PR; a second comment waits for the first run.
-concurrency:
-  group: claude-mention-${{ github.event.issue.number || github.event.pull_request.number }}
-  cancel-in-progress: false
-
 jobs:
-  claude:
-    # The action itself also refuses users without write access, and bots.
+  comment:
     if: >-
       ${{
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
+        github.event_name == 'issue_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        github.event.comment.user.type != 'Bot' &&
+        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      }}
+    # One Claude run at a time per issue or PR, shared with the other Claude workflows. `queue: max`
+    # keeps every waiting run; by default a new one replaces the one already waiting.
+    concurrency:
+      group: claude-${{ github.event.issue.number }}
+      cancel-in-progress: false
+      queue: max
+    # The most any job in claude-work.yml gets; the jobs there narrow it.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/claude-work.yml
+    with:
+      mode: ${{ startsWith(github.event.comment.body, '@claude plan') && 'plan' || 'work' }}
+      trigger: comment
+      number: ${{ github.event.issue.number }}
+      request: ${{ github.event.comment.body }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+
+  # The run that signalled is the PR's own code, so nothing from it is trusted. Its name carries the id of
+  # the comment or review; that item is looked up through the API and must be by the person who triggered
+  # the run, on this PR, mention @claude, and be posted in the 5 minutes before the run, so an old id can't
+  # be replayed.
+  find-review-mention:
+    if: >-
+      ${{
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        contains(fromJSON('["pull_request_review","pull_request_review_comment"]'), github.event.workflow_run.event)
       }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    timeout-minutes: 5
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      # The action trades this for the Claude GitHub App token it pushes with.
-      id-token: write
-      actions: read
+      pull-requests: read
+    outputs:
+      number: ${{ steps.find.outputs.number }}
+      mode: ${{ steps.find.outputs.mode }}
+      request: ${{ steps.find.outputs.request }}
+      location: ${{ steps.find.outputs.location }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: find
+        name: Find the comment that mentioned @claude
         timeout-minutes: 2
-        with:
-          fetch-depth: 1
-          # A saved GITHUB_TOKEN would outrank the app token on push, so CI waits for approval.
-          persist-credentials: false
-      # The hooks in .claude/settings.json and the project checks need Node and node_modules.
-      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
-        timeout-minutes: 5
-        with:
-          cache: true
-          save-cache: false
-          require-lockfile: true
-      # No `github_token` input: pushes made with GITHUB_TOKEN don't start CI.
-      - uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          additional_permissions: |
-            actions: read
-          # Opus plans, Sonnet does the rest. Full model IDs, so a model changes only when this file does.
-          # acceptEdits, the action's strict mode for comment runs: edits inside the checkout, other commands only
-          # from --allowedTools. The default, auto, lets a safety review approve commands the list leaves out.
-          claude_args: |
-            --model ${{ startsWith(github.event.comment.body, '@claude plan') && 'claude-opus-5-5' || 'claude-sonnet-5-5' }}
-            --max-turns 40
-            --permission-mode acceptEdits
-            --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
-            --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
-            --append-system-prompt "If the comment that triggered you starts with @claude plan, reply with an implementation plan only: the files you would change, the order of steps, the tests you would add, and open questions. Do not edit files, create a branch or commit. Otherwise do what the comment asks. This runner has no Postgres and no Playwright browsers: run lint, typecheck and unit tests, and leave database and e2e tests to CI."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          ACTOR: ${{ github.event.workflow_run.triggering_actor.login }}
+          STARTED: ${{ github.event.workflow_run.created_at }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          LISTED_PR: ${{ github.event.workflow_run.pull_requests[0].number }}
+          TITLE: ${{ github.event.workflow_run.display_title }}
+        run: |
+          # Only the id is taken from the run's name, and only digits.
+          if [ "$EVENT" = pull_request_review_comment ]; then kind=comment; else kind=review; fi
+          if [[ ! "$TITLE" =~ \ $kind\ ([0-9]+)$ ]]; then
+            echo "::notice::The run's name doesn't name a $kind."
+            exit 0
+          fi
+          id=${BASH_REMATCH[1]}
+          # A request that can't be found fails the run, so it's visible; it isn't dropped quietly.
+          if [ "$kind" = comment ]; then
+            # A diff comment names its own PR.
+            if ! gh api "repos/$REPO/pulls/comments/$id" > "$RUNNER_TEMP/raw.json"; then
+              echo "::error::The comment $id that the signal named could not be read."
+              exit 1
+            fi
+            number=$(jq -r '.pull_request_url | split("/") | last' "$RUNNER_TEMP/raw.json")
+            jq '. + {at: .created_at}' "$RUNNER_TEMP/raw.json" > "$RUNNER_TEMP/item.json"
+          else
+            # A review is read through its PR: the one listed on the run or, for a fork's PR, which isn't listed,
+            # each open PR at that commit.
+            candidates=${LISTED_PR:-$(gh pr list --repo "$REPO" --state open --search "$HEAD_SHA" --json number --jq '.[].number')}
+            number=''
+            for pr in $candidates; do
+              if gh api "repos/$REPO/pulls/$pr/reviews/$id" > "$RUNNER_TEMP/raw.json" 2> /dev/null; then
+                number=$pr
+                break
+              fi
+            done
+            if [ -z "$number" ]; then
+              echo "::error::The review $id that the signal named isn't on an open PR at $HEAD_SHA."
+              exit 1
+            fi
+            jq '. + {at: .submitted_at}' "$RUNNER_TEMP/raw.json" > "$RUNNER_TEMP/item.json"
+          fi
+          # The signal comes from the PR's code, so its id must name a real request: on the run's PR, by the
+          # person who triggered the run, with write access, posted in the 5 minutes before it.
+          jq --arg actor "$ACTOR" --arg started "$STARTED" --arg listed "$LISTED_PR" --arg pr "$number" '
+            ($started | fromdateiso8601) as $end
+            | select(
+                .at != null and ($listed == "" or $listed == $pr) and .user.login == $actor and .user.type != "Bot"
+                and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
+                and ((.body // "") | ascii_downcase | contains("@claude"))
+                and (.at | fromdateiso8601) <= $end and (.at | fromdateiso8601) >= $end - 300)' \
+            "$RUNNER_TEMP/item.json" > "$RUNNER_TEMP/found.json"
+          if [ ! -s "$RUNNER_TEMP/found.json" ]; then
+            echo "::notice::The $kind $id isn't an @claude request by $ACTOR on #$number from the 5 minutes before the run."
+            exit 0
+          fi
+          # Edited since it was posted: the text that signalled may differ from the text here, for example a
+          # plan request turned into one that changes code. Ask for a new comment instead of guessing.
+          if [ "$kind" = comment ] && [ "$(jq -r '.updated_at == .created_at' "$RUNNER_TEMP/found.json")" != true ]; then
+            echo "::error::The comment $id was edited after it was posted. Post the request again as a new comment."
+            exit 1
+          fi
+          delimiter="REQUEST_$(openssl rand -hex 16)"
+          {
+            echo "number=$number"
+            # Ignoring case, like GitHub's contains() and startsWith() in the other route and in the signal.
+            echo "mode=$(jq -r 'if (.body | ascii_downcase | startswith("@claude plan")) then "plan" else "work" end' "$RUNNER_TEMP/found.json")"
+            # A file name can hold a line break, which would start a new output; it's shown, never used as a path.
+            echo "location=$(jq -r 'if .path then "\(.path | gsub("[\r\n]"; " ")):\(.line // .original_line)" else "" end' "$RUNNER_TEMP/found.json")"
+            echo "request<<$delimiter"
+            jq -r .body "$RUNNER_TEMP/found.json"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
+  review-mention:
+    needs: find-review-mention
+    if: ${{ needs.find-review-mention.outputs.number != '' }}
+    concurrency:
+      group: claude-${{ needs.find-review-mention.outputs.number }}
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/claude-work.yml
+    with:
+      mode: ${{ needs.find-review-mention.outputs.mode }}
+      trigger: comment
+      number: ${{ fromJSON(needs.find-review-mention.outputs.number) }}
+      request: ${{ needs.find-review-mention.outputs.request }}
+      location: ${{ needs.find-review-mention.outputs.location }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

@@ -5,107 +5,99 @@ run-name: >-
     || format('Claude build · #{0} label {1} (skipped)', github.event.issue.number, github.event.label.name)
   }}
 
-# The `agent` label on an issue: Claude builds it on a branch, then this workflow opens the draft PR.
+# The `agent` label on an issue: Claude builds it from the approved plan, and the App opens
+# the draft PR. The work happens in claude-work.yml.
 on:
   issues:
     types: [labeled]
 
 permissions: {}
 
-concurrency:
-  group: claude-build-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 jobs:
-  build:
+  # The label is your approval of the issue, its title, description and comments as they were when you added
+  # it. The build may wait for another Claude run first, so this records them right away; claude-work.yml
+  # builds only if none of them changed or was deleted after the label.
+  approve:
     if: ${{ github.event.label.name == 'agent' }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: 2
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      # The action trades this for the Claude GitHub App token it pushes with.
-      id-token: write
-      actions: read
+      issues: read
     outputs:
-      branch: ${{ steps.claude.outputs.branch_name }}
+      approved: ${{ steps.record.outputs.approved }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        timeout-minutes: 2
-        with:
-          fetch-depth: 1
-          # A saved GITHUB_TOKEN would outrank the app token on push, so CI waits for approval.
-          persist-credentials: false
-      # The hooks in .claude/settings.json and the project checks need Node and node_modules.
-      - uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
-        timeout-minutes: 5
-        with:
-          cache: true
-          save-cache: false
-          require-lockfile: true
-      # No `github_token` input: pushes made with GITHUB_TOKEN don't start CI.
-      - id: claude
-        uses: anthropics/claude-code-action@f3b070c88125d33dbae5653df5f143101d4ea9dc # v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # The action's default is `claude`; without this, the `agent` label wouldn't start a run.
-          label_trigger: agent
-          # With a prompt, this keeps the branch and the progress comment of an `@claude` run.
-          track_progress: true
-          prompt: |
-            Build issue #${{ github.event.issue.number }} in ${{ github.repository }}.
-
-            1. Read the issue and every comment on it. If a comment holds an implementation
-               plan, the latest plan together with the maintainer's corrections after it is
-               the approved plan: follow it, and where a correction disagrees with the plan,
-               the correction wins. If there is no plan, build from the acceptance criteria.
-            2. Follow AGENTS.md. Stay inside the issue's scope and its "Out of scope" section.
-            3. Run `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm format`, plus
-               `pnpm codegen:check` if you touched the GraphQL schema or queries. This runner
-               has no Postgres and no Playwright browsers, so leave database and e2e tests to CI.
-            4. Commit with Conventional Commits and push your branch. Make the first commit's
-               subject the PR title you want. Do not open the PR; the workflow does.
-            5. Finish your comment on the issue with: what changed, why, how you tested it,
-               each acceptance criterion as met or not met, and where you left the plan and why.
-
-            If the work needs something AGENTS.md lists under "Ask first", don't do it; stop
-            and explain in your comment why it's needed.
-          # Opus wrote the plan; Sonnet builds from it. A full model ID, so it changes only here.
-          # acceptEdits, the action's strict mode for this kind of run: edits inside the checkout, other commands only
-          # from --allowedTools. The default, auto, lets a safety review approve commands the list leaves out.
-          claude_args: |
-            --model claude-sonnet-5-5
-            --max-turns 60
-            --permission-mode acceptEdits
-            --allowedTools "Bash(pnpm lint),Bash(pnpm typecheck),Bash(pnpm test),Bash(pnpm format),Bash(pnpm format:check),Bash(pnpm codegen),Bash(pnpm codegen:check),Bash(pnpm --filter * exec vitest run *)"
-            --disallowedTools "Edit(**/AGENTS.md),Edit(**/CLAUDE.md),Edit(./REVIEW.md),Edit(./.claude/**),Edit(./.github/**),Edit(./.devcontainer/**)"
-
-  # A fresh runner with no checkout: the build job ran code Claude wrote, so the personal token stays out of it.
-  open-pr:
-    needs: build
-    if: ${{ needs.build.outputs.branch != '' }}
-    runs-on: ubuntu-26.04
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      # A personal token, so CI runs on the PR without "Approve workflows to run".
-      - name: Open the draft PR
-        timeout-minutes: 2
+      # The action checks this too, but only after the App has replied and the build's runners have started.
+      - name: Check who added the label
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          BRANCH: ${{ needs.build.outputs.branch }}
-          ISSUE: ${{ github.event.issue.number }}
+          SENDER: ${{ github.event.sender.login }}
+          SENDER_TYPE: ${{ github.event.sender.type }}
         run: |
-          if [ -n "$(gh pr list --repo "$REPO" --head "$BRANCH" --json number --jq '.[].number')" ]; then
-            echo "A PR for $BRANCH already exists."
-            exit 0
+          if [ "$SENDER_TYPE" != User ]; then
+            echo "::error::The \`agent\` label was added by $SENDER, which is not a person."
+            exit 1
           fi
-          title=$(gh api "repos/$REPO/compare/main...$BRANCH" --jq '.commits[0].commit.message // empty' | head -n 1 || true)
-          if [ -z "$title" ]; then
-            echo "No commits on $BRANCH, so there is no PR to open."
-            exit 0
+          # `permission` is admin, write, read or none; maintain counts as write and triage as read.
+          permission=$(gh api "repos/$REPO/collaborators/$SENDER/permission" --jq .permission)
+          case "$permission" in
+            admin | write) ;;
+            *)
+              echo "::error::$SENDER added the \`agent\` label without write access ($permission)."
+              exit 1
+              ;;
+          esac
+      - id: record
+        name: Record the issue at approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          # The issue as the label event carried it: exactly what you approved, even if it changes a second later.
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          # Keep this hash the same as in claude-work.yml: the title, a line break, then the description.
+          issue=$(printf '%s\n%s' "$TITLE" "$BODY" | sha256sum | cut -d' ' -f1)
+          # Each read goes to a file first, so a read that fails partway stops the step instead of recording part
+          # of the issue (a pipe would hide it: this shell has no pipefail).
+          gh api --paginate "repos/$REPO/issues/$NUMBER/events" > "$RUNNER_TEMP/events.json"
+          gh api --paginate "repos/$REPO/issues/$NUMBER/comments" > "$RUNNER_TEMP/comments.json"
+          # This job starts a few seconds after the label, so comments are compared with the label's own time.
+          labeled_at=$(jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty' \
+            "$RUNNER_TEMP/events.json")
+          [ -n "$labeled_at" ] || { echo "::error::No \`agent\` label event on #$NUMBER."; exit 1; }
+          # Comments posted after the label are left out. claude-work.yml stops on any edited after it.
+          approved=$(jq -s -c --arg issue "$issue" --arg at "$labeled_at" \
+            '{issue: $issue, labeled_at: $at,
+              comments: [.[][] | select(.created_at <= $at) | {id, updated_at, author_association, user: {login: .user.login}}]}' \
+            "$RUNNER_TEMP/comments.json")
+          # claude-work.yml reads this from one environment variable, and Linux refuses one over 128 KiB. Never
+          # trimmed: a shorter record would leave approved comments out.
+          if [ "${#approved}" -gt 100000 ]; then
+            echo "::error::#$NUMBER has too many comments to record the approval (${#approved} characters). Move the plan to a new issue."
+            exit 1
           fi
-          printf 'Closes #%s\n\nBuilt by Claude from the plan approved on #%s. What changed, why and how it was tested: see the summary comment on the issue.\n' "$ISSUE" "$ISSUE" > "$RUNNER_TEMP/pr-body.md"
-          gh pr create --repo "$REPO" --draft --base main --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"
+          echo "approved=$approved" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: approve
+    # One Claude run at a time per issue or PR, shared with the other Claude workflows; `queue: max` keeps every waiting run.
+    concurrency:
+      group: claude-${{ github.event.issue.number }}
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/claude-work.yml
+    with:
+      mode: work
+      trigger: label
+      number: ${{ github.event.issue.number }}
+      approved: ${{ needs.approve.outputs.approved }}
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

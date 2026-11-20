@@ -1,4 +1,4 @@
-# Keep this name: pr-mark-ready.yml and claude-ci-fix.yml listen for it by name.
+# Keep this name: after-ci.yml listens for it by name.
 name: CI
 run-name: >-
   ${{
