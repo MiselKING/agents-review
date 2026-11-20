@@ -53,26 +53,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.issue.number }}
+          # The issue as the label event carried it: exactly what you approved, even if it changes a second later.
+          TITLE: ${{ github.event.issue.title }}
+          BODY: ${{ github.event.issue.body }}
         run: |
-          # This job starts a few seconds after the label, so everything is compared with the label's own time.
-          gh api --paginate "repos/$REPO/issues/$NUMBER/events" | jq -s '[.[][]]' > "$RUNNER_TEMP/events.json"
-          labeled_at=$(jq -r '[.[] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty' "$RUNNER_TEMP/events.json")
+          # Keep this hash the same as in claude-work.yml: the title, a line break, then the description.
+          issue=$(printf '%s\n%s' "$TITLE" "$BODY" | sha256sum | cut -d' ' -f1)
+          # This job starts a few seconds after the label, so comments are compared with the label's own time.
+          labeled_at=$(gh api --paginate "repos/$REPO/issues/$NUMBER/events" \
+            | jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty')
           [ -n "$labeled_at" ] || { echo "::error::No \`agent\` label event on #$NUMBER."; exit 1; }
-          # Title renames are events; description edits are only in GraphQL's lastEditedAt.
-          renamed=$(jq --arg at "$labeled_at" '[.[] | select(.event == "renamed" and .created_at > $at)] | length' "$RUNNER_TEMP/events.json")
-          # shellcheck disable=SC2016 # $owner, $name and $number are GraphQL variables
-          edited_at=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" \
-            -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { issue(number: $number) { lastEditedAt } } }' \
-            --jq '.data.repository.issue.lastEditedAt // empty')
-          issue_changed=false
-          if [ "$renamed" -gt 0 ] || [[ -n "$edited_at" && "$edited_at" > "$labeled_at" ]]; then issue_changed=true; fi
-          # Keep this hash the same as in claude-work.yml.
-          issue=$(gh api "repos/$REPO/issues/$NUMBER" | jq -j '.title, "\n", (.body // "")' | sha256sum | cut -d' ' -f1)
           # Comments posted after the label are left out. claude-work.yml stops on any edited after it.
           # Small entries: claude-work.yml reads this from one environment variable, limited to 128 KiB.
           approved=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" \
-            | jq -s -c --arg issue "$issue" --arg at "$labeled_at" --argjson changed "$issue_changed" \
-              '{issue: $issue, labeled_at: $at, issue_changed: $changed,
+            | jq -s -c --arg issue "$issue" --arg at "$labeled_at" \
+              '{issue: $issue, labeled_at: $at,
                 comments: [.[][] | select(.created_at <= $at) | {id, updated_at, author_association, user: {login: .user.login}}]}')
           echo "approved=$approved" >> "$GITHUB_OUTPUT"
 

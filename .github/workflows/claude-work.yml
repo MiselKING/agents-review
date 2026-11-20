@@ -47,8 +47,8 @@ on:
       approved:
         description: >-
           For `label`, the issue as it was when the label was added, from claude-build.yml: JSON with
-          `issue`, a hash of the title and description, and `comments`, each comment's id, updated_at,
-          author_association and user.login.
+          `issue`, a hash of the title and description from the label event, `labeled_at`, the label's
+          time, and `comments`, each earlier comment's id, updated_at, author_association and user.login.
         type: string
         default: ''
     # Passed by name, not with `secrets: inherit`. Both live in environments, and a job here that names
@@ -236,8 +236,7 @@ jobs:
             printf '%s' "$APPROVED" > "$RUNNER_TEMP/approved.json"
             # Keep this hash the same as in claude-build.yml.
             issue_hash=$(jq -j '.title, "\n", (.body // "")' "$RUNNER_TEMP/issue.json" | sha256sum | cut -d' ' -f1)
-            if [ "$(jq -r .issue_changed "$RUNNER_TEMP/approved.json")" != false ] \
-              || [ "$issue_hash" != "$(jq -r .issue "$RUNNER_TEMP/approved.json")" ]; then
+            if [ "$issue_hash" != "$(jq -r .issue "$RUNNER_TEMP/approved.json")" ]; then
               echo "skip=The issue's title or description changed after you added the \`agent\` label. $again" >> "$GITHUB_OUTPUT"
               exit 0
             fi
