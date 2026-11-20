@@ -38,23 +38,35 @@ jobs:
       draft: ${{ steps.find.outputs.draft }}
     steps:
       - id: find
-        name: Find the open PR at this commit
+        name: Find the open PR CI ran for
         timeout-minutes: 2
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          # The PRs the CI run itself names, not any PR that happens to share its branch.
+          PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
         run: |
-          pr=$(gh pr list --repo "$REPO" --head "$HEAD_BRANCH" --state open --json number,headRefOid,isDraft \
-            --jq "[.[] | select(.headRefOid == \"$HEAD_SHA\")][0] // empty | \"\(.number) \(.isDraft)\"")
-          if [ -z "$pr" ]; then
+          open=''
+          for n in $(jq -r '.[].number' <<< "$PRS"); do
+            pr=$(gh api "repos/$REPO/pulls/$n")
+            if [ "$(jq -r --arg sha "$HEAD_SHA" '.state == "open" and .head.sha == $sha' <<< "$pr")" = true ]; then
+              open="$open $n:$(jq -r .draft <<< "$pr")"
+            fi
+          done
+          read -r -a found <<< "$open"
+          if [ "${#found[@]}" -eq 0 ]; then
             echo "No open PR at $HEAD_SHA: closed, or the branch moved on and CI runs again there."
             exit 0
           fi
-          read -r number draft <<< "$pr"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+          # Two open PRs from one branch into different bases share this commit, and the run doesn't say which
+          # one it tested, so nothing is marked ready, reviewed or fixed on a guess.
+          if [ "${#found[@]}" -gt 1 ]; then
+            echo "::notice::Several open PRs are at $HEAD_SHA (${found[*]}); none is handled automatically."
+            exit 0
+          fi
+          echo "number=${found[0]%%:*}" >> "$GITHUB_OUTPUT"
+          echo "draft=${found[0]#*:}" >> "$GITHUB_OUTPUT"
 
   mark-ready:
     needs: pr
@@ -78,7 +90,16 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REPO: ${{ github.repository }}
           PR: ${{ needs.pr.outputs.number }}
-        run: gh pr ready "$PR" --repo "$REPO"
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Checked again right before marking: a push since the lookup is a commit CI hasn't passed yet.
+          state=$(gh pr view "$PR" --repo "$REPO" --json state,isDraft,headRefOid \
+            --jq '"\(.state) \(.isDraft) \(.headRefOid)"')
+          if [ "$state" != "OPEN true $HEAD_SHA" ]; then
+            echo "::notice::#$PR is no longer an open draft at $HEAD_SHA ($state), so it isn't marked ready."
+            exit 0
+          fi
+          gh pr ready "$PR" --repo "$REPO"
 
   claude-review:
     needs: pr

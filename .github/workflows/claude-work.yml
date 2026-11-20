@@ -315,8 +315,12 @@ jobs:
           EOF
               ;;
             ci-failure)
-              # The attempt that failed; the whole log first, so a failed download stops here.
-              gh run view "$CI_RUN_ID" --attempt "$CI_RUN_ATTEMPT" --repo "$REPO" --log-failed > "$RUNNER_TEMP/ci-failed.log"
+              # The attempt that failed; the whole log first. Without the logs there's nothing to fix from, so the
+              # run stops with that reason in the reply, and doesn't use up the PR's one automatic fix.
+              if ! gh run view "$CI_RUN_ID" --attempt "$CI_RUN_ATTEMPT" --repo "$REPO" --log-failed > "$RUNNER_TEMP/ci-failed.log"; then
+                echo "skip=The failed CI run's logs couldn't be downloaded, so Claude didn't try a fix. Re-run the failed jobs to try again, or take over." >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
               tail -c 400000 "$RUNNER_TEMP/ci-failed.log" > ci-failed.log
               {
                 echo "# Task"
