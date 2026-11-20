@@ -282,18 +282,11 @@ jobs:
     environment: publish
     permissions: {}
     steps:
-      # The App: CodeRabbit's docs don't say whether it takes commands from bots, so check this after merge.
-      - id: app
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
-        timeout-minutes: 2
-        with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          permission-pull-requests: write
       - name: Ask CodeRabbit to review
         timeout-minutes: 2
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          # A person's token: CodeRabbit ignored the request when the App posted it. Repo-only, Pull requests write.
+          GH_TOKEN: ${{ secrets.CODERABBIT_REQUEST_TOKEN }}
           REPO: ${{ github.repository }}
           PR: ${{ needs.pr.outputs.number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
