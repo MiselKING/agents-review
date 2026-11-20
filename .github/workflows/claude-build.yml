@@ -14,9 +14,9 @@ on:
 permissions: {}
 
 jobs:
-  # The label is your approval of the issue and its comments as they are now. The build may wait for
-  # another Claude run first, so this records them right away; claude-work.yml builds only if none of
-  # them changed or was deleted meanwhile.
+  # The label is your approval of the issue, its title, description and comments as they were when you added
+  # it. The build may wait for another Claude run first, so this records them right away; claude-work.yml
+  # builds only if none of them changed or was deleted after the label.
   approve:
     if: ${{ github.event.label.name == 'agent' }}
     runs-on: ubuntu-26.04
@@ -24,18 +24,36 @@ jobs:
     permissions:
       issues: read
     outputs:
-      comments: ${{ steps.record.outputs.comments }}
+      approved: ${{ steps.record.outputs.approved }}
     steps:
       - id: record
-        name: Record the comments at approval
+        name: Record the issue at approval
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.issue.number }}
         run: |
-          comments=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" \
-            | jq -s -c '[.[][] | {id, updated_at, html_url, author_association, user: {login: .user.login}}]')
-          echo "comments=$comments" >> "$GITHUB_OUTPUT"
+          # This job starts a few seconds after the label, so everything is compared with the label's own time.
+          gh api --paginate "repos/$REPO/issues/$NUMBER/events" | jq -s '[.[][]]' > "$RUNNER_TEMP/events.json"
+          labeled_at=$(jq -r '[.[] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty' "$RUNNER_TEMP/events.json")
+          [ -n "$labeled_at" ] || { echo "::error::No \`agent\` label event on #$NUMBER."; exit 1; }
+          # Title renames are events; description edits are only in GraphQL's lastEditedAt.
+          renamed=$(jq --arg at "$labeled_at" '[.[] | select(.event == "renamed" and .created_at > $at)] | length' "$RUNNER_TEMP/events.json")
+          # shellcheck disable=SC2016 # $owner, $name and $number are GraphQL variables
+          edited_at=$(gh api graphql -F owner="${REPO%/*}" -F name="${REPO#*/}" -F number="$NUMBER" \
+            -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { issue(number: $number) { lastEditedAt } } }' \
+            --jq '.data.repository.issue.lastEditedAt // empty')
+          issue_changed=false
+          if [ "$renamed" -gt 0 ] || [[ -n "$edited_at" && "$edited_at" > "$labeled_at" ]]; then issue_changed=true; fi
+          # Keep this hash the same as in claude-work.yml.
+          issue=$(gh api "repos/$REPO/issues/$NUMBER" | jq -j '.title, "\n", (.body // "")' | sha256sum | cut -d' ' -f1)
+          # Comments posted after the label are left out. claude-work.yml stops on any edited after it.
+          # Small entries: claude-work.yml reads this from one environment variable, limited to 128 KiB.
+          approved=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" \
+            | jq -s -c --arg issue "$issue" --arg at "$labeled_at" --argjson changed "$issue_changed" \
+              '{issue: $issue, labeled_at: $at, issue_changed: $changed,
+                comments: [.[][] | select(.created_at <= $at) | {id, updated_at, author_association, user: {login: .user.login}}]}')
+          echo "approved=$approved" >> "$GITHUB_OUTPUT"
 
   build:
     needs: approve
@@ -54,7 +72,7 @@ jobs:
       mode: work
       trigger: label
       number: ${{ github.event.issue.number }}
-      approved: ${{ needs.approve.outputs.comments }}
+      approved: ${{ needs.approve.outputs.approved }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

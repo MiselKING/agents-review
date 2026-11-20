@@ -46,8 +46,9 @@ on:
         default: ''
       approved:
         description: >-
-          For `label`, the issue's comments as they were when the label was added: a JSON array of
-          id, updated_at, html_url, author_association and user.login, from claude-build.yml.
+          For `label`, the issue as it was when the label was added, from claude-build.yml: JSON with
+          `issue`, a hash of the title and description, and `comments`, each comment's id, updated_at,
+          author_association and user.login.
         type: string
         default: ''
     # Passed by name, not with `secrets: inherit`. Both live in environments, and a job here that names
@@ -135,6 +136,7 @@ jobs:
       result: ${{ steps.claude.outputs.structured_output }}
       has_patch: ${{ steps.patch.outputs.has_patch }}
       patch: ${{ steps.patch.outputs.patch }}
+      refused: ${{ steps.patch.outputs.refused }}
     steps:
       - id: target
         name: Find what to work on
@@ -216,25 +218,36 @@ jobs:
           jq '{number, title, body, author: .user.login, is_pr: (.pull_request != null)}' "$RUNNER_TEMP/issue.json" > issue.json
           gh api --paginate "repos/$REPO/issues/$NUMBER/comments" | jq -s '[.[][]]' > "$RUNNER_TEMP/comments.json"
           if [ "$TRIGGER" = label ]; then
-            # A build follows the issue as you approved it: the comments as they were when you added the label,
-            # recorded by claude-build.yml before the build waited for its turn. If one of those changed or was
-            # deleted since, nothing is built: you approve again.
-            [ -n "$APPROVED" ] || { echo "::error::No record of the comments at approval."; exit 1; }
+            # A build follows the issue as you approved it: its title, description and comments as they were when
+            # you added the label, recorded by claude-build.yml before the build waited for its turn. If one of
+            # those changed or was deleted since, nothing is built: you approve again.
+            [ -n "$APPROVED" ] || { echo "::error::No record of the issue at approval."; exit 1; }
+            again="Remove the \`agent\` label and add it again to approve the issue as it is now."
             if ! jq -e '[.labels[].name] | index("agent")' "$RUNNER_TEMP/issue.json" > /dev/null; then
               echo "skip=The \`agent\` label was removed before the build started." >> "$GITHUB_OUTPUT"
               exit 0
             fi
             printf '%s' "$APPROVED" > "$RUNNER_TEMP/approved.json"
-            changed=$(jq -r --slurpfile approved "$RUNNER_TEMP/approved.json" --argjson trusted "$trusted" --argjson bots "$bots" "
+            # Keep this hash the same as in claude-build.yml.
+            issue_hash=$(jq -j '.title, "\n", (.body // "")' "$RUNNER_TEMP/issue.json" | sha256sum | cut -d' ' -f1)
+            if [ "$(jq -r .issue_changed "$RUNNER_TEMP/approved.json")" != false ] \
+              || [ "$issue_hash" != "$(jq -r .issue "$RUNNER_TEMP/approved.json")" ]; then
+              echo "skip=The issue's title or description changed after you added the \`agent\` label. $again" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            changed=$(jq -r --slurpfile approved "$RUNNER_TEMP/approved.json" --argjson trusted "$trusted" --argjson bots "$bots" \
+              --arg url "$(jq -r .html_url "$RUNNER_TEMP/issue.json")" "
               (map({key: (.id | tostring), value: .updated_at}) | from_entries) as \$now
-              | [\$approved[0][] | $keep | select(\$now[.id | tostring] != .updated_at) | .html_url] | join(\", \")" \
+              | \$approved[0].labeled_at as \$at
+              | [\$approved[0].comments[] | $keep | select(\$now[.id | tostring] != .updated_at or .updated_at > \$at)
+                 | \"\(\$url)#issuecomment-\(.id)\"] | join(\", \")" \
               "$RUNNER_TEMP/comments.json")
             if [ -n "$changed" ]; then
-              echo "skip=A comment changed or was deleted after you added the \`agent\` label ($changed). Remove the label and add it again to approve the issue as it is now." >> "$GITHUB_OUTPUT"
+              echo "skip=A comment changed or was deleted after you added the \`agent\` label ($changed). $again" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             # Comments posted after the approval are left out.
-            jq --slurpfile approved "$RUNNER_TEMP/approved.json" '[$approved[0][].id] as $ids | map(select(.id | IN($ids[])))' \
+            jq --slurpfile approved "$RUNNER_TEMP/approved.json" '[$approved[0].comments[].id] as $ids | map(select(.id | IN($ids[])))' \
               "$RUNNER_TEMP/comments.json" > "$RUNNER_TEMP/approved-comments.json"
             mv "$RUNNER_TEMP/approved-comments.json" "$RUNNER_TEMP/comments.json"
           fi
@@ -375,6 +388,20 @@ jobs:
           BASELINE: ${{ steps.rules.outputs.baseline }}
         run: |
           git add -A
+          # The same checks publish makes, here too so the reply can name the files. publish still checks the
+          # final patch: the check job runs the branch's code, which can change files too.
+          protected='^(\.github|\.claude|\.husky|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
+          # Line breaks removed: file names come from Claude, and a line break would start a new output.
+          refused=$(git diff --cached --no-renames --name-only -z "$BASELINE" | grep -zE "$protected" | tr '\0\n\r' ',  ' || true)
+          links=$(git diff --cached --no-renames --raw -z "$BASELINE" | tr '\0' '\n' | awk '/^:/ {mode = $2; next} mode ~ /^(120000|160000)$/ {print; mode = ""}' | tr '\n\r' ',,' || true)
+          reason=''
+          if [ -n "$refused" ]; then reason="they touch files agents may not change: ${refused%,}"; fi
+          if [ -n "$links" ]; then reason="${reason:+$reason; }they add a symlink or submodule: ${links%,}"; fi
+          if [ -n "$reason" ]; then
+            echo "refused=The changes were not published: $reason." >> "$GITHUB_OUTPUT"
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git diff --cached --binary "$BASELINE" > "$RUNNER_TEMP/changes.patch"
           if [ ! -s "$RUNNER_TEMP/changes.patch" ]; then
             echo "has_patch=false" >> "$GITHUB_OUTPUT"
@@ -477,13 +504,15 @@ jobs:
 
   publish:
     needs: [ack, work, check]
-    if: ${{ !cancelled() && needs.ack.result == 'success' && needs.ack.outputs.comment_id != '' }}
+    # Always, also on a cancelled run, so "Working on it" is always replaced. Nothing is pushed on a cancelled run.
+    if: ${{ always() && needs.ack.result == 'success' && needs.ack.outputs.comment_id != '' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment: publish
     permissions: {}
     steps:
       - id: app
+        if: ${{ always() }}
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         timeout-minutes: 2
         with:
@@ -493,7 +522,7 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
       # The commit Claude worked from: the PR's head, or main's commit for a new branch.
-      - if: ${{ needs.check.outputs.has_patch == 'true' }}
+      - if: ${{ success() && !cancelled() && needs.check.outputs.has_patch == 'true' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         timeout-minutes: 2
         with:
@@ -502,7 +531,7 @@ jobs:
           token: ${{ steps.app.outputs.token }}
       # Applying a patch only writes files. Nothing from the branch is installed or run here.
       - id: push
-        if: ${{ needs.check.outputs.has_patch == 'true' }}
+        if: ${{ success() && !cancelled() && needs.check.outputs.has_patch == 'true' }}
         name: Check, commit and push the changes
         timeout-minutes: 3
         env:
@@ -515,6 +544,7 @@ jobs:
           RESULT: ${{ needs.work.outputs.result }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           SERVER_URL: ${{ github.server_url }}
         run: |
           fail() { echo "$1" > "$RUNNER_TEMP/publish-error.md"; echo "::error::$1"; exit 1; }
@@ -545,7 +575,8 @@ jobs:
               || fail "The changes were not published: the branch moved or was deleted while Claude worked. Ask again."
             echo "url=$(gh api "repos/$REPO/commits/$(git rev-parse HEAD)" --jq .html_url)" >> "$GITHUB_OUTPUT"
           else
-            branch="claude/issue-$NUMBER-$RUN_ID"
+            # The attempt too: a re-run keeps the run id, and an earlier attempt may have pushed its branch already.
+            branch="claude/issue-$NUMBER-$RUN_ID-$RUN_ATTEMPT"
             # Only as a new branch: never on top of one that already exists.
             git push --quiet --force-with-lease="refs/heads/$branch:" origin "HEAD:refs/heads/$branch" \
               || fail "The changes were not published: the branch $branch could not be created."
@@ -567,6 +598,8 @@ jobs:
           SKIP: ${{ needs.work.outputs.skip }}
           RESULT: ${{ needs.work.outputs.result }}
           PUSHED_URL: ${{ steps.push.outputs.url }}
+          REFUSED: ${{ needs.work.outputs.refused }}
+          JOB_STATUS: ${{ job.status }}
           WORK_HAS_PATCH: ${{ needs.work.outputs.has_patch }}
           CHECK_RESULT: ${{ needs.check.result }}
           CHECK_HAS_PATCH: ${{ needs.check.outputs.has_patch }}
@@ -579,6 +612,11 @@ jobs:
             elif [ -f "$RUNNER_TEMP/publish-error.md" ]; then
               cat "$RUNNER_TEMP/publish-error.md"
               printf '\n([run](%s))\n' "$RUN_URL"
+            elif [ -n "$REFUSED" ]; then
+              if [ -n "$RESULT" ]; then jq -r .reply <<< "$RESULT"; echo; fi
+              printf '%s ([run](%s))\n' "$REFUSED" "$RUN_URL"
+            elif [ -z "$PUSHED_URL" ] && { [ "$WORK_RESULT" = cancelled ] || [ "$CHECK_RESULT" = cancelled ] || [ "$JOB_STATUS" = cancelled ]; }; then
+              echo "The run was cancelled, and nothing was published. ([run]($RUN_URL))"
             elif [ "$WORK_RESULT" != success ] || [ -z "$RESULT" ]; then
               echo "Claude's run failed or gave no result. ([run]($RUN_URL))"
             elif [ "$WORK_HAS_PATCH" = true ] && [ "$CHECK_HAS_PATCH" != true ]; then
