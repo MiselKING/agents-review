@@ -272,7 +272,7 @@ Four of the six product features. The other two, member table and run history pa
 **Phase 5: Self-healing and safety**
 
 - ✅ **Agent drafts, you review:** CI-failure workflow: a diagnosis comment plus one fix attempt.
-- [ ] **You:** a GitHub App for pushes, PRs and comments (Contents, Pull requests and Issues: read and write; no Workflows). Two environments limited to `main`: `publish`, with the App's private key as the `APP_PRIVATE_KEY` secret and its Client ID as the `APP_CLIENT_ID` variable, and `claude`, with the `CLAUDE_CODE_OAUTH_TOKEN` secret. The repository variable `APP_BOT_LOGIN`, the App's name plus `[bot]`. **Agent:** move every Claude workflow onto it (#51). **You:** after the post-merge checks, delete the personal token and the repository-level `CLAUDE_CODE_OAUTH_TOKEN`.
+- ✅ **You:** a GitHub App for pushes, PRs and comments (Contents, Pull requests and Issues: read and write; no Workflows). Two environments limited to `main`: `publish`, with the App's private key as the `APP_PRIVATE_KEY` secret and its Client ID as the `APP_CLIENT_ID` variable, and `claude`, with the `CLAUDE_CODE_OAUTH_TOKEN` secret. The repository variable `APP_BOT_LOGIN`, the App's name plus `[bot]`. **Agent:** move every Claude workflow onto it (#51). **You:** after the post-merge checks, delete the personal token and the repository-level `CLAUDE_CODE_OAUTH_TOKEN`.
 - [ ] **You:** install Renovate. **Agent:** `renovate.json` with `minimumReleaseAge` of at least 1 day, matching pnpm's own release-age default.
 - [ ] **You:** turn on CodeQL and Dependabot alerts (secret scanning is already on). **Agent:** path-triggered security review and issue triage on open.
 - [ ] **Agent drafts, you review:** the weekly docs-sync workflow.
