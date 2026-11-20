@@ -59,16 +59,25 @@ jobs:
         run: |
           # Keep this hash the same as in claude-work.yml: the title, a line break, then the description.
           issue=$(printf '%s\n%s' "$TITLE" "$BODY" | sha256sum | cut -d' ' -f1)
+          # Each read goes to a file first, so a read that fails partway stops the step instead of recording part
+          # of the issue (a pipe would hide it: this shell has no pipefail).
+          gh api --paginate "repos/$REPO/issues/$NUMBER/events" > "$RUNNER_TEMP/events.json"
+          gh api --paginate "repos/$REPO/issues/$NUMBER/comments" > "$RUNNER_TEMP/comments.json"
           # This job starts a few seconds after the label, so comments are compared with the label's own time.
-          labeled_at=$(gh api --paginate "repos/$REPO/issues/$NUMBER/events" \
-            | jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty')
+          labeled_at=$(jq -s -r '[.[][] | select(.event == "labeled" and .label.name == "agent")] | last | .created_at // empty' \
+            "$RUNNER_TEMP/events.json")
           [ -n "$labeled_at" ] || { echo "::error::No \`agent\` label event on #$NUMBER."; exit 1; }
           # Comments posted after the label are left out. claude-work.yml stops on any edited after it.
-          # Small entries: claude-work.yml reads this from one environment variable, limited to 128 KiB.
-          approved=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" \
-            | jq -s -c --arg issue "$issue" --arg at "$labeled_at" \
-              '{issue: $issue, labeled_at: $at,
-                comments: [.[][] | select(.created_at <= $at) | {id, updated_at, author_association, user: {login: .user.login}}]}')
+          approved=$(jq -s -c --arg issue "$issue" --arg at "$labeled_at" \
+            '{issue: $issue, labeled_at: $at,
+              comments: [.[][] | select(.created_at <= $at) | {id, updated_at, author_association, user: {login: .user.login}}]}' \
+            "$RUNNER_TEMP/comments.json")
+          # claude-work.yml reads this from one environment variable, and Linux refuses one over 128 KiB. Never
+          # trimmed: a shorter record would leave approved comments out.
+          if [ "${#approved}" -gt 100000 ]; then
+            echo "::error::#$NUMBER has too many comments to record the approval (${#approved} characters). Move the plan to a new issue."
+            exit 1
+          fi
           echo "approved=$approved" >> "$GITHUB_OUTPUT"
 
   build:

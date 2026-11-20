@@ -109,27 +109,38 @@ jobs:
             exit 0
           fi
           id=${BASH_REMATCH[1]}
-          # A fork's PR isn't listed on the run, so look it up by its commit; claude-work.yml then explains it can't help.
-          number=${LISTED_PR:-$(gh pr list --repo "$REPO" --state open --search "$HEAD_SHA" --json number --jq '.[0].number // empty')}
-          if [ -z "$number" ]; then
-            echo "::notice::No open PR at $HEAD_SHA."
-            exit 0
-          fi
+          # A request that can't be found fails the run, so it's visible; it isn't dropped quietly.
           if [ "$kind" = comment ]; then
-            item=$(gh api "repos/$REPO/pulls/comments/$id" 2>/dev/null) \
-              && jq '. + {at: .created_at, pr: (.pull_request_url | split("/") | last)}' <<< "$item" > "$RUNNER_TEMP/item.json"
+            # A diff comment names its own PR.
+            if ! gh api "repos/$REPO/pulls/comments/$id" > "$RUNNER_TEMP/raw.json"; then
+              echo "::error::The comment $id that the signal named could not be read."
+              exit 1
+            fi
+            number=$(jq -r '.pull_request_url | split("/") | last' "$RUNNER_TEMP/raw.json")
+            jq '. + {at: .created_at}' "$RUNNER_TEMP/raw.json" > "$RUNNER_TEMP/item.json"
           else
-            item=$(gh api "repos/$REPO/pulls/$number/reviews/$id" 2>/dev/null) \
-              && jq --arg pr "$number" '. + {at: .submitted_at, pr: $pr}' <<< "$item" > "$RUNNER_TEMP/item.json"
+            # A review is read through its PR: the one listed on the run or, for a fork's PR, which isn't listed,
+            # each open PR at that commit.
+            candidates=${LISTED_PR:-$(gh pr list --repo "$REPO" --state open --search "$HEAD_SHA" --json number --jq '.[].number')}
+            number=''
+            for pr in $candidates; do
+              if gh api "repos/$REPO/pulls/$pr/reviews/$id" > "$RUNNER_TEMP/raw.json" 2> /dev/null; then
+                number=$pr
+                break
+              fi
+            done
+            if [ -z "$number" ]; then
+              echo "::error::The review $id that the signal named isn't on an open PR at $HEAD_SHA."
+              exit 1
+            fi
+            jq '. + {at: .submitted_at}' "$RUNNER_TEMP/raw.json" > "$RUNNER_TEMP/item.json"
           fi
-          if [ ! -s "$RUNNER_TEMP/item.json" ]; then
-            echo "::notice::The $kind $id on #$number could not be read."
-            exit 0
-          fi
-          jq --arg actor "$ACTOR" --arg started "$STARTED" --arg pr "$number" '
+          # The signal comes from the PR's code, so its id must name a real request: on the run's PR, by the
+          # person who triggered the run, with write access, posted in the 5 minutes before it.
+          jq --arg actor "$ACTOR" --arg started "$STARTED" --arg listed "$LISTED_PR" --arg pr "$number" '
             ($started | fromdateiso8601) as $end
             | select(
-                .at != null and .pr == $pr and .user.login == $actor and .user.type != "Bot"
+                .at != null and ($listed == "" or $listed == $pr) and .user.login == $actor and .user.type != "Bot"
                 and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
                 and ((.body // "") | ascii_downcase | contains("@claude"))
                 and (.at | fromdateiso8601) <= $end and (.at | fromdateiso8601) >= $end - 300)' \
@@ -137,6 +148,12 @@ jobs:
           if [ ! -s "$RUNNER_TEMP/found.json" ]; then
             echo "::notice::The $kind $id isn't an @claude request by $ACTOR on #$number from the 5 minutes before the run."
             exit 0
+          fi
+          # Edited since it was posted: the text that signalled may differ from the text here, for example a
+          # plan request turned into one that changes code. Ask for a new comment instead of guessing.
+          if [ "$kind" = comment ] && [ "$(jq -r '.updated_at == .created_at' "$RUNNER_TEMP/found.json")" != true ]; then
+            echo "::error::The comment $id was edited after it was posted. Post the request again as a new comment."
+            exit 1
           fi
           delimiter="REQUEST_$(openssl rand -hex 16)"
           {

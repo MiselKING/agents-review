@@ -40,6 +40,10 @@ on:
         description: For `ci-failure`, the failed CI run.
         type: string
         default: ''
+      ci_run_attempt:
+        description: For `ci-failure`, the attempt of that run that failed.
+        type: string
+        default: ''
       head_sha:
         description: For `ci-failure`, the commit CI tested.
         type: string
@@ -87,6 +91,7 @@ jobs:
           NUMBER: ${{ inputs.number }}
           MODE: ${{ inputs.mode }}
           TRIGGER: ${{ inputs.trigger }}
+          HEAD_SHA: ${{ inputs.head_sha }}
           APP_SLUG: ${{ steps.app.outputs.app-slug }}
           APP_BOT_LOGIN: ${{ vars.APP_BOT_LOGIN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -96,13 +101,23 @@ jobs:
             echo "::error::The repository variable APP_BOT_LOGIN must be '${APP_SLUG}[bot]' (it is '$APP_BOT_LOGIN')."
             exit 1
           fi
-          # One automatic fix per PR. after-ci.yml checks this before the fix waits in the queue; this checks
-          # again once it runs, so fixes queued behind each other don't all run. Only the App's comments and
-          # yours count, so a pasted marker can't block a fix.
+          # One automatic fix per PR, checked here because this runs when the fix's turn in the queue comes: an
+          # earlier fix has finished by then, and kept its marker only if it really tried. Without a comment, the
+          # other jobs don't run.
           if [ "$TRIGGER" = ci-failure ]; then
-            marked=$(gh api --paginate "repos/$REPO/issues/$NUMBER/comments" | jq -s -r --arg app "$APP_BOT_LOGIN" \
-              '.[][] | select(.user.login == $app or (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))) | .body')
-            if printf '%s\n' "$marked" | grep -qF '<!-- claude-ci-fix -->'; then
+            # The fix is for the commit that failed; if the PR moved on, that commit's own CI decides. Checked
+            # before the marker is posted, so a fix that won't run never blocks the next one.
+            if [ "$(gh api "repos/$REPO/pulls/$NUMBER" --jq .head.sha)" != "$HEAD_SHA" ]; then
+              echo "::notice::#$NUMBER has moved past the commit that failed; CI on the newer commit decides."
+              exit 0
+            fi
+            # Read in full before deciding: a lookup that fails partway stops the step, so it can't pass as
+            # "no fix yet". Only the App's comments and yours count, so a pasted marker can't block a fix.
+            gh api --paginate "repos/$REPO/issues/$NUMBER/comments" > "$RUNNER_TEMP/comments.json"
+            marked=$(jq -s --arg app "$APP_BOT_LOGIN" 'any(.[][];
+              (.user.login == $app or (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR")))
+              and ((.body // "") | contains("<!-- claude-ci-fix -->")))' "$RUNNER_TEMP/comments.json")
+            if [ "$marked" = true ]; then
               echo "::notice::#$NUMBER already had its automatic fix."
               exit 0
             fi
@@ -110,7 +125,7 @@ jobs:
           {
             if [ "$MODE" = plan ]; then echo "Claude is writing a plan. ([run]($RUN_URL))"
             else echo "Claude is working on it. ([run]($RUN_URL))"; fi
-            # This marker is what the check above, and after-ci.yml, look for.
+            # This marker is what the check above looks for.
             if [ "$TRIGGER" = ci-failure ]; then printf '\n<!-- claude-ci-fix -->\n'; fi
           } > "$RUNNER_TEMP/ack.md"
           id=$(gh api --method POST "repos/$REPO/issues/$NUMBER/comments" -F "body=@$RUNNER_TEMP/ack.md" --jq .id)
@@ -190,6 +205,8 @@ jobs:
           # A symlink could point Claude's file reads outside the workspace. Removed in this local commit only,
           # so the branch keeps them; publish refuses new ones.
           find . -path ./.git -prune -o -type l -print0 | xargs -0 -r rm -f --
+          # The next step writes the context there, so a branch's own copy can't mix in or block it.
+          rm -rf claude-context
           git ls-tree -r -z --name-only FETCH_HEAD | grep -zE "$rules" | xargs -0 -r git checkout FETCH_HEAD --
           git add -A
           # A local commit only, so the patch holds Claude's changes and not this swap.
@@ -211,6 +228,7 @@ jobs:
           REQUEST: ${{ inputs.request }}
           LOCATION: ${{ inputs.location }}
           CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
           APPROVED: ${{ inputs.approved }}
           APP_BOT_LOGIN: ${{ vars.APP_BOT_LOGIN }}
         run: |
@@ -220,9 +238,12 @@ jobs:
           keep='select((.author_association | IN($trusted[])) or (.user.login | IN($bots[])))'
           mkdir claude-context
           cd claude-context
+          # Each read goes to a file first, so a read that fails partway stops the step instead of passing
+          # on part of the data (a pipe would hide it: this shell has no pipefail).
           gh api "repos/$REPO/issues/$NUMBER" > "$RUNNER_TEMP/issue.json"
           jq '{number, title, body, author: .user.login, is_pr: (.pull_request != null)}' "$RUNNER_TEMP/issue.json" > issue.json
-          gh api --paginate "repos/$REPO/issues/$NUMBER/comments" | jq -s '[.[][]]' > "$RUNNER_TEMP/comments.json"
+          gh api --paginate "repos/$REPO/issues/$NUMBER/comments" > "$RUNNER_TEMP/comments-pages.json"
+          jq -s '[.[][]]' "$RUNNER_TEMP/comments-pages.json" > "$RUNNER_TEMP/comments.json"
           if [ "$TRIGGER" = label ]; then
             # A build follows the issue as you approved it: its title, description and comments as they were when
             # you added the label, recorded by claude-build.yml before the build waited for its turn. If one of
@@ -260,10 +281,12 @@ jobs:
             "$RUNNER_TEMP/comments.json" > comments.json
           if [ "$(jq -r .is_pr issue.json)" = true ]; then
             gh pr diff "$NUMBER" --repo "$REPO" > diff.patch
-            gh api --paginate "repos/$REPO/pulls/$NUMBER/reviews" \
-              | jq -s --argjson trusted "$trusted" --argjson bots "$bots" "[.[][] | $keep | {author: .user.login, submitted_at, body}]" > reviews.json
-            gh api --paginate "repos/$REPO/pulls/$NUMBER/comments" \
-              | jq -s --argjson trusted "$trusted" --argjson bots "$bots" "[.[][] | $keep | {author: .user.login, path, line, body}]" > review-comments.json
+            gh api --paginate "repos/$REPO/pulls/$NUMBER/reviews" > "$RUNNER_TEMP/reviews-pages.json"
+            jq -s --argjson trusted "$trusted" --argjson bots "$bots" "[.[][] | $keep | {author: .user.login, submitted_at, body}]" \
+              "$RUNNER_TEMP/reviews-pages.json" > reviews.json
+            gh api --paginate "repos/$REPO/pulls/$NUMBER/comments" > "$RUNNER_TEMP/review-comments-pages.json"
+            jq -s --argjson trusted "$trusted" --argjson bots "$bots" "[.[][] | $keep | {author: .user.login, path, line, body}]" \
+              "$RUNNER_TEMP/review-comments-pages.json" > review-comments.json
           fi
           case "$TRIGGER" in
             comment)
@@ -292,7 +315,9 @@ jobs:
           EOF
               ;;
             ci-failure)
-              gh run view "$CI_RUN_ID" --repo "$REPO" --log-failed | tail -c 400000 > ci-failed.log
+              # The attempt that failed; the whole log first, so a failed download stops here.
+              gh run view "$CI_RUN_ID" --attempt "$CI_RUN_ATTEMPT" --repo "$REPO" --log-failed > "$RUNNER_TEMP/ci-failed.log"
+              tail -c 400000 "$RUNNER_TEMP/ci-failed.log" > ci-failed.log
               {
                 echo "# Task"
                 echo
@@ -432,6 +457,7 @@ jobs:
     outputs:
       has_patch: ${{ steps.final.outputs.has_patch }}
       patch: ${{ steps.final.outputs.patch }}
+      prepared: ${{ steps.final.outputs.prepared }}
       summary: ${{ steps.checks.outputs.summary }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -467,7 +493,17 @@ jobs:
         timeout-minutes: 2
         env:
           BASE_SHA: ${{ needs.work.outputs.base_sha }}
+          INSTALL: ${{ steps.install.outcome }}
+          TIDY: ${{ steps.tidy.outcome }}
         run: |
+          # Only a fully prepared patch is published: after a failed install or codegen, generated code and
+          # formatting could be out of step with Claude's changes. The checks step reports what failed.
+          if [ "$INSTALL" != success ] || [ "$TIDY" != success ]; then
+            echo "prepared=false" >> "$GITHUB_OUTPUT"
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "prepared=true" >> "$GITHUB_OUTPUT"
           git add -A
           git diff --cached --binary "$BASE_SHA" > "$RUNNER_TEMP/final.patch"
           if [ ! -s "$RUNNER_TEMP/final.patch" ]; then
@@ -611,6 +647,7 @@ jobs:
           WORK_HAS_PATCH: ${{ needs.work.outputs.has_patch }}
           CHECK_RESULT: ${{ needs.check.result }}
           CHECK_HAS_PATCH: ${{ needs.check.outputs.has_patch }}
+          PREPARED: ${{ needs.check.outputs.prepared }}
           CHECKS: ${{ needs.check.outputs.summary }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -632,11 +669,19 @@ jobs:
               echo "Claude's run failed or gave no result. ([run]($RUN_URL))"
             elif [ "$WORK_HAS_PATCH" = true ] && { [ "$CHECK_RESULT" != success ] || [ "$CHECK_HAS_PATCH" != true ]; }; then
               jq -r .reply <<< "$RESULT"
-              if [ "$CHECK_RESULT" = success ]; then
-                printf '\n\nNothing was published: no changes were left after codegen and format. ([run](%s))\n' "$RUN_URL"
-              else
+              if [ "$CHECK_RESULT" != success ]; then
                 printf '\n\nThe changes were not published: the check job failed before it finished. ([run](%s))\n' "$RUN_URL"
+              elif [ "$PREPARED" = false ]; then
+                printf '\n\nThe changes were not published: install, codegen or format failed.\n'
+                if [ -n "$CHECKS" ]; then printf '\n%s\n' "$CHECKS"; fi
+                printf '\n([run](%s))\n' "$RUN_URL"
+              else
+                printf '\n\nNothing was published: no changes were left after codegen and format. ([run](%s))\n' "$RUN_URL"
               fi
+            elif [ "$CHECK_HAS_PATCH" = true ] && [ "$PUSH_OUTCOME" != success ]; then
+              # A patch was ready, but publishing stopped before the push step ran or finished, with no message.
+              jq -r .reply <<< "$RESULT"
+              printf '\n\nThe changes were not published: publishing failed before the push. ([run](%s))\n' "$RUN_URL"
             else
               jq -r .reply <<< "$RESULT"
               if [ -n "$PUSHED_URL" ]; then printf '\n\nChanges: %s\n' "$PUSHED_URL"; fi
