@@ -1,1 +1,1 @@
-export const e2eBreak: number = "not a number";
+export const e2eBreak: string = 'not a number';
