@@ -80,6 +80,14 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 - Measurement: 12 fixed tasks, run with a bare setup (Phase 4) and the full setup (Phase 7), 2 runs each
 - All tools free on a public repo. The only paid extra is the optional Copilot comparison: one month of Copilot Pro ($10).
 
+### GitHub setup for the agent workflows
+Not needed to run the app; this is what the workflows in GitHub rely on (details in the [plan](docs/_project-plan.md)):
+- Environment `claude`, limited to `main`: secret `CLAUDE_CODE_OAUTH_TOKEN`, from `claude setup-token`.
+- New GitHub App (Contents, Pull requests and Issues: read and write; no Workflows), installed on this repo only. Created via "Settings -> Developer settings -> New app"
+- Environment `publish`, limited to `main`: the App's private key as secret `APP_PRIVATE_KEY`, its Client ID as variable `APP_CLIENT_ID`.
+- Repository variable `APP_BOT_LOGIN`: the App's name plus `[bot]`.
+- CodeRabbit installed, and the rulesets on `main`.
+
 ## Decisions
 - Compose runs Postgres only; `pnpm dev` runs the apps and services
 - Commits follow Conventional Commits
