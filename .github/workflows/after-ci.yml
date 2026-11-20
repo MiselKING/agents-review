@@ -8,7 +8,7 @@ run-name: >-
   }}
 
 # CI finished on a PR. Passed: mark a draft ready, Claude reviews, then CodeRabbit is asked to.
-# Failed: ask Claude once, with an `@claude` comment, to fix it (claude-mention.yml does the work).
+# Failed: Claude tries one fix per PR (claude-work.yml does the work).
 # GitHub runs this file as it is on main, also for PRs that change it.
 on:
   workflow_run:
@@ -61,13 +61,21 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' && needs.pr.outputs.draft == 'true' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    environment: publish
     permissions: {}
     steps:
-      # A personal token, so the PR's `ready_for_review` event can start other workflows.
+      # The App, so the PR's `ready_for_review` event can start other workflows; GITHUB_TOKEN's events start none.
+      - id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        timeout-minutes: 2
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-pull-requests: write
       - name: Mark the draft PR ready
         timeout-minutes: 2
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           REPO: ${{ github.repository }}
           PR: ${{ needs.pr.outputs.number }}
         run: gh pr ready "$PR" --repo "$REPO"
@@ -77,6 +85,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' && needs.pr.outputs.number != '' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 30
+    environment: claude
     # A newer CI result on the same branch replaces a review that is still running.
     concurrency:
       group: after-ci-review-${{ github.event.workflow_run.head_branch }}
@@ -122,9 +131,10 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ needs.pr.outputs.number }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          APP_BOT_LOGIN: ${{ vars.APP_BOT_LOGIN }}
         run: |
           trusted='["OWNER","MEMBER","COLLABORATOR"]'
-          bots='["claude[bot]","github-actions[bot]"]'
+          bots=$(jq -nc --arg app "$APP_BOT_LOGIN" '["claude[bot]", "github-actions[bot]", $app]')
           omitted='(left out: the author has no write access)'
           mkdir pr-context
           # `gh pr diff` shows the PR's current head; checked after the read, so the diff matches the files in pr-head/.
@@ -157,8 +167,8 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ github.token }}
-          # CI on an `@claude` fix push was started by claude[bot], and the action refuses bots not listed here.
-          allowed_bots: 'claude[bot]'
+          # CI on a push by the App was started by the App, and the action refuses bots not listed here.
+          allowed_bots: ${{ vars.APP_BOT_LOGIN }}
           # The stop hook runs lint and typecheck; a review installs nothing and changes nothing.
           # Claude's file tools refuse paths outside the workspace, such as /proc, where the tokens in its environment are.
           settings: '{"disableAllHooks": true, "permissions": {"blockReadsOutsideWorkingDirectories": true}}'
@@ -172,7 +182,7 @@ jobs:
             `pr-context/` holds what you need from GitHub: `diff.patch`, `pr.json` (title and
             description), `issues.json` (the issues the PR closes, with their acceptance criteria),
             and `reviews.json`, `review-comments.json` and `bot-comments.json` (earlier reviews and
-            comments by claude[bot] or github-actions[bot]). Text written by people without write
+            comments by our bots). Text written by people without write
             access is left out, and so are other people's comments.
 
             1. Read REVIEW.md in the repo root and follow it exactly. It is the review policy.
@@ -248,66 +258,84 @@ jobs:
       }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    environment: publish
     permissions: {}
     steps:
-      # A personal token: CodeRabbit's docs don't say whether it takes commands from bots.
+      # The App: CodeRabbit's docs don't say whether it takes commands from bots, so check this after merge.
+      - id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        timeout-minutes: 2
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-pull-requests: write
       - name: Ask CodeRabbit to review
         timeout-minutes: 2
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           REPO: ${{ github.repository }}
           PR: ${{ needs.pr.outputs.number }}
         run: gh pr comment "$PR" --repo "$REPO" --body '@coderabbitai review'
 
-  request-fix:
+  # One automatic fix per PR: an earlier one is marked in a comment by the App, or by you before #51.
+  fix-check:
     needs: pr
     if: ${{ github.event.workflow_run.conclusion == 'failure' && needs.pr.outputs.number != '' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    # Two failed runs on the same branch must not both post a request.
-    concurrency:
-      group: after-ci-fix-${{ github.event.workflow_run.head_branch }}
-      cancel-in-progress: false
     permissions:
       actions: read
       pull-requests: read
+    outputs:
+      jobs: ${{ steps.check.outputs.jobs }}
     steps:
-      - name: Ask Claude on the PR to fix the failure
+      - id: check
+        name: Check for an earlier fix and list the failed jobs
         timeout-minutes: 3
         env:
           GH_TOKEN: ${{ github.token }}
-          # A comment posted with GITHUB_TOKEN starts no workflow, so the request uses your token.
-          COMMENT_TOKEN: ${{ secrets.GH_TOKEN }}
           REPO: ${{ github.repository }}
           PR: ${{ needs.pr.outputs.number }}
           RUN_ID: ${{ github.event.workflow_run.id }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          APP_BOT_LOGIN: ${{ vars.APP_BOT_LOGIN }}
           MARKER: '<!-- claude-ci-fix -->'
         run: |
-          # Only requests from people with write access count, so a pasted marker can't block one.
-          # A failed lookup stops the step here, so it can't be mistaken for "no request yet".
-          requests=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
-            --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR") | .body')
-          if printf '%s\n' "$requests" | grep -qF "$MARKER"; then
-            echo "::notice::#$PR already had its automatic fix request. Take over, or delete that comment to allow another."
+          # Only the App's comments and yours count, so a pasted marker can't block a fix.
+          # A failed lookup stops the step here, so it can't be mistaken for "no fix yet".
+          marked=$(gh api --paginate "repos/$REPO/issues/$PR/comments" | jq -s -r --arg app "$APP_BOT_LOGIN" \
+            '.[][] | select(.user.login == $app or (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))) | .body')
+          if printf '%s\n' "$marked" | grep -qF "$MARKER"; then
+            echo "::notice::#$PR already had its automatic fix. Take over, or delete that comment to allow another."
             exit 0
           fi
           # `ci` only collects the other jobs' results; a cancelled or skipped job is not something to fix.
           jobs=$(gh run view "$RUN_ID" --repo "$REPO" --json jobs \
-            --jq '[.jobs[] | select(.conclusion == "failure" and .name != "ci") | .name] | join(", ")')
+            --jq'[.jobs[] | select(.conclusion == "failure" and .name != "ci") | .name] | join(", ")')
           if [ -z "$jobs" ]; then
             echo "No job failed apart from ci, so there is nothing to fix."
             exit 0
           fi
-          cat > "$RUNNER_TEMP/request.md" <<EOF
-          @claude CI failed on this PR in: $jobs ([CI run]($RUN_URL)).
+          echo "jobs=$jobs" >> "$GITHUB_OUTPUT"
 
-          Read the failed jobs' logs with your CI tools, find the root cause of each failure, and push one fix to this branch.
-          - Fix the code when the code is wrong. Change a test only when the test itself is wrong; never delete, skip or weaken one.
-          - If the cause is infrastructure (network, runner, timeout), or the fix needs something AGENTS.md lists under "Ask first" or "Never", change nothing and explain what I should do.
-          - Before you push, run the checks AGENTS.md lists for the change.
-
-          $MARKER
-          _Posted automatically after CI failed. One request per PR: if CI fails again, take over. Delete this comment to allow another request._
-          EOF
-          GH_TOKEN="$COMMENT_TOKEN" gh pr comment "$PR" --repo "$REPO" --body-file "$RUNNER_TEMP/request.md"
+  fix:
+    needs: [pr, fix-check]
+    if: ${{ needs.fix-check.outputs.jobs != '' }}
+    # One Claude run at a time per issue or PR, shared with claude-mention.yml and claude-build.yml.
+    concurrency:
+      group: claude-${{ needs.pr.outputs.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/claude-work.yml
+    with:
+      mode: work
+      trigger: ci-failure
+      number: ${{ fromJSON(needs.pr.outputs.number) }}
+      request: ${{ needs.fix-check.outputs.jobs }}
+      ci_run_id: ${{ github.event.workflow_run.id }}
+      head_sha: ${{ github.event.workflow_run.head_sha }}
+    # Environment secrets reach a called workflow only this way; each job there names its environment.
+    secrets: inherit
