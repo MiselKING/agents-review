@@ -94,7 +94,7 @@ Not needed to run the app; this is what the workflows in GitHub rely on (details
 - One-time setup rules (ports from env, Vite `strictPort`, `/graphql` proxy) live in the scaffold issue, not in AGENTS.md
 - Five tables: `customers`, `events`, `audiences`, `sync_runs`, `sync_batches`. `pnpm db:seed` reloads 10,000 customers and 90,000 events; event dates are relative to the day it runs
 - Tests that need Postgres are named `*.db.test.ts` and run with `pnpm test:db`, after `pnpm db:migrate`. `pnpm test` stays database-free
-- Agent workflows run Claude without write tokens; a GitHub App publishes its changes.
+- Agent workflows run Claude without write tokens; a GitHub App publishes its changes
 
 ## Core packages (checked 2026-11-08)
 
