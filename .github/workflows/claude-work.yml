@@ -152,8 +152,9 @@ jobs:
       has_patch: ${{ steps.patch.outputs.has_patch }}
       patch: ${{ steps.patch.outputs.patch }}
       refused: ${{ steps.patch.outputs.refused }}
-      # Whether Claude actually ran: only then does a CI fix count as the PR's one automatic attempt.
-      attempted: ${{ steps.claude.outcome == 'success' || steps.claude.outcome == 'failure' }}
+      # Whether Claude started (then finished, failed or was cancelled): only then does a CI fix count as the
+      # PR's one automatic attempt. A step that never started is skipped.
+      attempted: ${{ steps.claude.outcome == 'success' || steps.claude.outcome == 'failure' || steps.claude.outcome == 'cancelled' }}
     steps:
       - id: target
         name: Find what to work on
