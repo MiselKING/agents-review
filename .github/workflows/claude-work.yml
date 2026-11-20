@@ -152,6 +152,8 @@ jobs:
       has_patch: ${{ steps.patch.outputs.has_patch }}
       patch: ${{ steps.patch.outputs.patch }}
       refused: ${{ steps.patch.outputs.refused }}
+      # Whether Claude actually ran: only then does a CI fix count as the PR's one automatic attempt.
+      attempted: ${{ steps.claude.outcome == 'success' || steps.claude.outcome == 'failure' }}
     steps:
       - id: target
         name: Find what to work on
@@ -230,6 +232,7 @@ jobs:
           CI_RUN_ID: ${{ inputs.ci_run_id }}
           CI_RUN_ATTEMPT: ${{ inputs.ci_run_attempt }}
           APPROVED: ${{ inputs.approved }}
+          BASE_SHA: ${{ steps.target.outputs.base_sha }}
           APP_BOT_LOGIN: ${{ vars.APP_BOT_LOGIN }}
         run: |
           trusted='["OWNER","MEMBER","COLLABORATOR"]'
@@ -281,6 +284,11 @@ jobs:
             "$RUNNER_TEMP/comments.json" > comments.json
           if [ "$(jq -r .is_pr issue.json)" = true ]; then
             gh pr diff "$NUMBER" --repo "$REPO" > diff.patch
+            # `gh pr diff` shows the PR's current head; checked after the read, so the diff matches the checkout.
+            if [ "$(gh api "repos/$REPO/pulls/$NUMBER" --jq .head.sha)" != "$BASE_SHA" ]; then
+              echo "skip=The PR got a new commit while Claude was getting ready. Ask again." >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
             gh api --paginate "repos/$REPO/pulls/$NUMBER/reviews" > "$RUNNER_TEMP/reviews-pages.json"
             jq -s --argjson trusted "$trusted" --argjson bots "$bots" "[.[][] | $keep | {author: .user.login, submitted_at, body}]" \
               "$RUNNER_TEMP/reviews-pages.json" > reviews.json
@@ -642,6 +650,7 @@ jobs:
           TRIGGER: ${{ inputs.trigger }}
           WORK_RESULT: ${{ needs.work.result }}
           SKIP: ${{ needs.work.outputs.skip }}
+          ATTEMPTED: ${{ needs.work.outputs.attempted }}
           RESULT: ${{ needs.work.outputs.result }}
           PUSHED_URL: ${{ steps.push.outputs.url }}
           PUSH_OUTCOME: ${{ steps.push.outcome }}
@@ -692,8 +701,9 @@ jobs:
               if [ -n "$CHECKS" ]; then printf '\n%s\n' "$CHECKS"; fi
               printf '\n([run](%s))\n' "$RUN_URL"
             fi
-            # A skipped fix doesn't use up the PR's one automatic fix.
-            if [ "$TRIGGER" = ci-failure ] && [ -z "$SKIP" ]; then
+            # Only a fix where Claude actually ran uses up the PR's one automatic fix; a skip or a failure
+            # before Claude started leaves it for the next CI failure.
+            if [ "$TRIGGER" = ci-failure ] && [ "$ATTEMPTED" = true ]; then
               printf '\n<!-- claude-ci-fix -->\n_Automatic fix after CI failed. One per PR: if CI fails again, take over._\n'
             fi
           } > "$RUNNER_TEMP/reply.md"

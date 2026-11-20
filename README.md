@@ -85,7 +85,7 @@ Not needed to run the app; this is what the workflows in GitHub rely on (details
 - Environment `claude`, limited to `main`: secret `CLAUDE_CODE_OAUTH_TOKEN`, from `claude setup-token`.
 - New GitHub App (Contents, Pull requests and Issues: read and write; no Workflows), installed on this repo only. Created via "Settings -> Developer settings -> New app"
 - Environment `publish`, limited to `main`: the App's private key as secret `APP_PRIVATE_KEY`, its Client ID as variable `APP_CLIENT_ID`.
-- Repository variable `APP_BOT_LOGIN`: the App's name plus `[bot]`.
+- Repository variable `APP_BOT_LOGIN`: the App's slug, from its URL (`github.com/apps/<slug>`), plus `[bot]`.
 - CodeRabbit installed, and the rulesets on `main`.
 
 ## Decisions

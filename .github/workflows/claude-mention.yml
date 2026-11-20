@@ -160,7 +160,8 @@ jobs:
             echo "number=$number"
             # Ignoring case, like GitHub's contains() and startsWith() in the other route and in the signal.
             echo "mode=$(jq -r 'if (.body | ascii_downcase | startswith("@claude plan")) then "plan" else "work" end' "$RUNNER_TEMP/found.json")"
-            echo "location=$(jq -r 'if .path then "\(.path):\(.line // .original_line)" else "" end' "$RUNNER_TEMP/found.json")"
+            # A file name can hold a line break, which would start a new output; it's shown, never used as a path.
+            echo "location=$(jq -r 'if .path then "\(.path | gsub("[\r\n]"; " ")):\(.line // .original_line)" else "" end' "$RUNNER_TEMP/found.json")"
             echo "request<<$delimiter"
             jq -r .body "$RUNNER_TEMP/found.json"
             echo "$delimiter"

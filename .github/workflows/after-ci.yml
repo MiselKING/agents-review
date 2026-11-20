@@ -356,8 +356,9 @@ jobs:
       trigger: ci-failure
       number: ${{ fromJSON(needs.pr.outputs.number) }}
       request: ${{ needs.fix-check.outputs.jobs }}
-      ci_run_id: ${{ github.event.workflow_run.id }}
-      ci_run_attempt: ${{ github.event.workflow_run.run_attempt }}
+      # As text, the inputs' declared type; the event gives numbers.
+      ci_run_id: ${{ format('{0}', github.event.workflow_run.id) }}
+      ci_run_attempt: ${{ format('{0}', github.event.workflow_run.run_attempt) }}
       head_sha: ${{ github.event.workflow_run.head_sha }}
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
