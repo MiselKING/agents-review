@@ -86,7 +86,7 @@ Not needed to run the app; this is what the workflows in GitHub rely on (details
 - New GitHub App (Contents, Pull requests and Issues: read and write; no Workflows), installed on this repo only. Created via "Settings -> Developer settings -> New app"
 - Environment `publish`, limited to `main`: the App's private key as secret `APP_PRIVATE_KEY`, its Client ID as variable `APP_CLIENT_ID`, and secret `CODERABBIT_REQUEST_TOKEN`: your fine-grained token for this repo only, Pull requests read and write. CodeRabbit ignores requests from the App.
 - Repository variable `APP_BOT_LOGIN`: the App's slug, from its URL (`github.com/apps/<slug>`), plus `[bot]`.
-- CodeRabbit installed, and the rulesets on `main`.
+- CodeRabbit installed, with a review seat assigned to the App's bot (it skips PRs opened by a bot without one), and the rulesets on `main`.
 
 ## Decisions
 - Compose runs Postgres only; `pnpm dev` runs the apps and services
