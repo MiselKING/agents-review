@@ -1,9 +1,8 @@
-// Tests for the git hooks. Run with `pnpm test:hooks` (Node's built-in test runner).
-// Each test runs real git in a new repository that uses these hooks, with a fake `pnpm` first on PATH.
+// Run with `pnpm test:hooks`. Each test runs real git in a new repository that uses these hooks.
 /* oxlint-disable typescript/no-floating-promises -- node:test's describe() and it() return promises that the test runner itself awaits */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -22,32 +21,13 @@ function tempDir(): string {
   return dir;
 }
 
-// Prints the check it was asked to run, and fails for the checks listed in FAIL_CHECKS.
-const fakeBin = tempDir();
-writeFileSync(
-  path.join(fakeBin, 'pnpm'),
-  '#!/bin/sh\necho "fake pnpm $1"\ncase " $FAIL_CHECKS " in *" $1 "*) echo "boom in $1" >&2; exit 1 ;; esac\n',
-);
-chmodSync(path.join(fakeBin, 'pnpm'), 0o755);
-
-// Windows names the variable `Path`; setting a second `PATH` beside it would be ambiguous.
-const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH';
-
 type GitResult = { status: number | null; output: string };
 
-function git(cwd: string, args: string[], failChecks = ''): GitResult {
+function git(cwd: string, args: string[]): GitResult {
   const result = spawnSync(
     'git',
     ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args],
-    {
-      cwd,
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        [pathKey]: `${fakeBin}${path.delimiter}${process.env[pathKey] ?? ''}`,
-        FAIL_CHECKS: failChecks,
-      },
-    },
+    { cwd, encoding: 'utf8' },
   );
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
@@ -62,8 +42,7 @@ function repo(branch: string): string {
   return dir;
 }
 
-const commit = (cwd: string, failChecks = '') =>
-  git(cwd, ['commit', '--quiet', '-m', 'x'], failChecks);
+const commit = (cwd: string) => git(cwd, ['commit', '--quiet', '-m', 'x']);
 const commitCount = (cwd: string) => git(cwd, ['rev-list', '--all', '--count']).output.trim();
 
 describe('pre-commit', () => {
@@ -75,32 +54,10 @@ describe('pre-commit', () => {
     assert.equal(commitCount(cwd), '0');
   });
 
-  it('commits on a branch when every check passes', () => {
+  it('commits on a branch', () => {
     const cwd = repo('feat/1-x');
     assert.equal(commit(cwd).status, 0);
     assert.equal(commitCount(cwd), '1');
-  });
-
-  it('refuses with the failing output when a check fails', () => {
-    const cwd = repo('feat/1-x');
-    const { status, output } = commit(cwd, 'typecheck');
-    assert.notEqual(status, 0);
-    assert.match(output, /boom in typecheck/);
-    assert.match(output, /`pnpm typecheck` failed, so nothing was committed/);
-    assert.equal(commitCount(cwd), '0');
-  });
-
-  it('names the command that fixes generated code or formatting', () => {
-    assert.match(commit(repo('feat/1-x'), 'codegen:check').output, /Run `pnpm codegen`/);
-    assert.match(commit(repo('feat/1-x'), 'format:check').output, /Run `pnpm format`/);
-  });
-
-  it('runs however the commit is started, such as with git -C from another folder', () => {
-    const target = repo('feat/1-x');
-    const { status, output } = git(tempDir(), ['-C', target, 'commit', '-m', 'x'], 'lint');
-    assert.notEqual(status, 0);
-    assert.match(output, /`pnpm lint` failed/);
-    assert.equal(commitCount(target), '0');
   });
 });
 

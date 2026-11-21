@@ -3,7 +3,7 @@
 /* oxlint-disable typescript/no-floating-promises -- node:test's describe() and it() return promises that the test runner itself awaits */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -144,14 +144,16 @@ describe('check-before-stop', () => {
 
   it('runs the checks from the top of the checkout when Claude is in a package folder', () => {
     const cwd = tempRepo('feat/1-x');
-    writeFileSync(path.join(cwd, 'root-marker'), '');
     const packageDir = path.join(cwd, 'apps', 'web');
     mkdirSync(packageDir, { recursive: true });
-    const atRoot = `node -e "process.exit(require('fs').existsSync('root-marker') ? 0 : 1)"`;
-    assert.deepEqual(
-      runHook('check-before-stop.ts', stopInput(packageDir), stopChecks(atRoot)),
-      SILENT,
-    );
+    const cwdFile = path.join(cwd, '.git', 'check-cwd.txt');
+    const writeCwd = `node -e "require('fs').writeFileSync(process.env.CWD_FILE, process.cwd())"`;
+    const result = runHook('check-before-stop.ts', stopInput(packageDir), {
+      ...stopChecks(writeCwd),
+      CWD_FILE: cwdFile,
+    });
+    assert.deepEqual(result, SILENT);
+    assert.equal(realpathSync(readFileSync(cwdFile, 'utf8')), realpathSync(cwd));
   });
 
   it('skips the checks when nothing changed', () => {

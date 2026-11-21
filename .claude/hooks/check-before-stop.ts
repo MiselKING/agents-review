@@ -2,8 +2,7 @@
 // Stateless, with one forced fix round, so it can never loop:
 //   - checks fail, first time: exit 2 with the errors, and Claude keeps working
 //   - checks still fail in that forced round (`stop_hook_active`): let Claude stop, with a warning
-// Tests and codegen don't run here: Stop fires after every reply, also mid-task, when a failing test
-// can be on purpose. Git's pre-commit hook (.githooks/) runs them before a commit, and CI on every PR.
+// No tests or codegen here: Stop fires after every reply, also mid-task, when a test can fail on purpose.
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 

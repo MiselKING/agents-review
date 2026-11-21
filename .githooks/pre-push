@@ -1,7 +1,5 @@
 #!/bin/sh
-# Git runs this before every push. The ruleset on GitHub blocks pushes to main too; this gives the
-# reason before anything leaves the machine. Git sends one line per ref on stdin:
-# <local ref> <local object> <remote ref> <remote object>
+# Git sends one line per ref on stdin: <local ref> <local object> <remote ref> <remote object>
 
 while read -r _local_ref _local_object remote_ref _remote_object; do
   if [ "$remote_ref" = refs/heads/main ]; then
