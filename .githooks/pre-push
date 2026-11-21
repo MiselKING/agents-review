@@ -1,0 +1,11 @@
+#!/bin/sh
+# Git runs this before every push. The ruleset on GitHub blocks pushes to main too; this gives the
+# reason before anything leaves the machine. Git sends one line per ref on stdin:
+# <local ref> <local object> <remote ref> <remote object>
+
+while read -r _local_ref _local_object remote_ref _remote_object; do
+  if [ "$remote_ref" = refs/heads/main ]; then
+    echo 'pre-push: no pushes to main. Push your branch and open a pull request.' >&2
+    exit 1
+  fi
+done

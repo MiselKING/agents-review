@@ -3,15 +3,24 @@
 //   - checks fail, first time: exit 2 with the errors, and Claude keeps working
 //   - checks still fail in that forced round (`stop_hook_active`): let Claude stop, with a warning
 // Tests and codegen don't run here: Stop fires after every reply, also mid-task, when a failing test
-// can be on purpose. check-git-command.ts runs them before a commit, and CI runs them on every PR.
+// can be on purpose. Git's pre-commit hook (.githooks/) runs them before a commit, and CI on every PR.
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { findFailure, hasChanges, projectRoot, readChecks, readHookInput, workingDir } from './lib.ts';
+import {
+  findFailure,
+  hasChanges,
+  projectRoot,
+  readChecks,
+  readHookInput,
+  repoRoot,
+  workingDir,
+} from './lib.ts';
 
 const input = await readHookInput();
 const isStopEvent = input !== undefined && (input.hook_event_name ?? 'Stop') === 'Stop';
-const cwd = workingDir(input, projectRoot(input));
+// The checkout's top folder: the checks are root scripts, and Claude's shell may be in a package folder.
+const cwd = repoRoot(workingDir(input, projectRoot(input)));
 
 // Nothing to check for other events, before `pnpm install`, or when nothing changed.
 const failure =

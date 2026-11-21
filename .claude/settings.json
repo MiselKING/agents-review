@@ -19,6 +19,7 @@
             "Edit(**/CLAUDE.md)",
             "Edit(./REVIEW.md)",
             "Edit(./.claude/**)",
+            "Edit(./.githooks/**)",
             "Edit(./.github/**)",
             "Edit(./.devcontainer/**)",
             "Edit(./pnpm-workspace.yaml)",
@@ -53,6 +54,10 @@
             "Bash(git push *+*)",
             "Bash(git push * main)",
             "Bash(git push *:main)",
+            "Bash(*--no-verify*)",
+            "Bash(git commit -n*)",
+            "Bash(git commit * -n*)",
+            "Bash(*core.hooksPath*)",
             "Bash(gh pr merge *)",
             "Bash(gh pr review *)",
             "Bash(npm *)",
@@ -62,19 +67,6 @@
         ]
     },
     "hooks": {
-        "PreToolUse": [
-            {
-                "matcher": "Bash|PowerShell",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-git-command.ts\"",
-                        "timeout": 600,
-                        "onFailure": "block"
-                    }
-                ]
-            }
-        ],
         "PostToolUse": [
             {
                 "matcher": "Edit|Write",

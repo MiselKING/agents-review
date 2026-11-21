@@ -55,7 +55,8 @@ Before finishing any change, run and pass:
   - read, print or commit `.env` or any secret
   - edit generated code or hand-write migrations
   - delete, skip or weaken a failing test (no `.skip`, `.only`, or loosened assertions)
-  - edit AGENTS.md, CLAUDE.md, REVIEW.md or `.claude/` unless asked
+  - skip or turn off the git hooks (no `--no-verify`, `git commit -n`, or changing `core.hooksPath`); when one fails, fix what it reports
+  - edit AGENTS.md, CLAUDE.md, REVIEW.md, `.claude/` or `.githooks/` unless asked
   - run `drizzle-kit push`, npm or yarn
 
 ## Git & PRs

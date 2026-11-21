@@ -205,7 +205,7 @@ jobs:
         name: Use main's agent rules, without the branch's symlinks
         timeout-minutes: 2
         run: |
-          rules='(^|/)\.claude/|^\.husky/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
+          rules='(^|/)\.claude/|^\.(husky|githooks)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           git fetch --quiet --no-tags --no-recurse-submodules --depth=1 origin main
           git ls-files -z | grep -zE "$rules" | xargs -0 -r rm -rf --
           # Whole `.claude/` folders, at any depth: main's are restored below.
@@ -448,7 +448,7 @@ jobs:
           git add -A
           # The same checks publish makes, here too so the reply can name the files. publish still checks the
           # final patch: the check job runs the branch's code, which can change files too.
-          protected='(^|/)\.claude/|^(\.github|\.husky|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
+          protected='(^|/)\.claude/|^(\.github|\.husky|\.githooks|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           # Line breaks removed: file names come from Claude, and a line break would start a new output.
           refused=$(git diff --cached --no-renames --name-only -z "$BASELINE" | grep -zE "$protected" | tr '\0\n\r' ',  ' || true)
           links=$(git diff --cached --no-renames --raw -z "$BASELINE" | tr '\0' '\n' | awk '/^:/ {mode = $2; next} mode ~ /^(120000|160000)$/ {print; mode = ""}' | tr '\n\r' ',,' || true)
@@ -621,7 +621,7 @@ jobs:
           [ -n "$PATCH" ] || fail "The changes were not published: GitHub dropped them because they looked like they contain a secret."
           printf '%s' "$PATCH" | base64 -d | gunzip > "$RUNNER_TEMP/changes.patch"
           git apply --index "$RUNNER_TEMP/changes.patch" || fail "The changes don't apply to the commit Claude worked from."
-          protected='(^|/)\.claude/|^(\.github|\.husky|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
+          protected='(^|/)\.claude/|^(\.github|\.husky|\.githooks|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           # Raw names: git puts names with unusual characters in quotes otherwise, and those would slip past the check.
           git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/paths" || fail "The changes were not published: the changed files could not be listed."
           refused=$(grep -zE "$protected" "$RUNNER_TEMP/paths" | tr '\0' ',' || true)

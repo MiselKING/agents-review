@@ -9,7 +9,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { gitSubcommands, isRecord } from './lib.ts';
+import { isRecord } from './lib.ts';
 
 const hooksDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(hooksDir, '../..');
@@ -142,8 +142,25 @@ describe('check-before-stop', () => {
     assert.match(String(parseObject(stdout).systemMessage), /still fails/);
   });
 
+  it('runs the checks from the top of the checkout when Claude is in a package folder', () => {
+    const cwd = tempRepo('feat/1-x');
+    writeFileSync(path.join(cwd, 'root-marker'), '');
+    const packageDir = path.join(cwd, 'apps', 'web');
+    mkdirSync(packageDir, { recursive: true });
+    const atRoot = `node -e "process.exit(require('fs').existsSync('root-marker') ? 0 : 1)"`;
+    assert.deepEqual(
+      runHook('check-before-stop.ts', stopInput(packageDir), stopChecks(atRoot)),
+      SILENT,
+    );
+  });
+
   it('skips the checks when nothing changed', () => {
     const cwd = tempRepo('feat/1-x', { changed: false });
+    assert.deepEqual(runHook('check-before-stop.ts', stopInput(cwd), stopChecks(FAIL)), SILENT);
+  });
+
+  it('skips the checks before pnpm install', () => {
+    const cwd = tempRepo('feat/1-x', { installed: false });
     assert.deepEqual(runHook('check-before-stop.ts', stopInput(cwd), stopChecks(FAIL)), SILENT);
   });
 
@@ -151,87 +168,5 @@ describe('check-before-stop', () => {
     const other = { hook_event_name: 'SubagentStop', cwd: tempRepo('feat/1-x') };
     assert.deepEqual(runHook('check-before-stop.ts', other, stopChecks(FAIL)), SILENT);
     assert.deepEqual(runHook('check-before-stop.ts', 'not json', stopChecks(FAIL)), SILENT);
-  });
-});
-
-describe('gitSubcommands', () => {
-  it('finds the subcommand after git options, prefixes and other commands', () => {
-    assert.deepEqual(gitSubcommands('git commit -m "x"'), ['commit']);
-    assert.deepEqual(gitSubcommands('pnpm test && git -C apps/web -c a=b commit -m x'), ['commit']);
-    assert.deepEqual(gitSubcommands('git status; git --no-pager push origin HEAD'), [
-      'status',
-      'push',
-    ]);
-    assert.deepEqual(gitSubcommands('GIT_EDITOR=true git commit --amend'), ['commit']);
-    assert.deepEqual(gitSubcommands('(cd x && git push)'), ['push']);
-    assert.deepEqual(gitSubcommands('& git.exe commit -m x'), ['commit']);
-  });
-
-  it('ignores git as an argument or inside another name', () => {
-    assert.deepEqual(gitSubcommands('echo git commit'), []);
-    assert.deepEqual(gitSubcommands('gitk --all'), []);
-  });
-});
-
-const bashCall = (command: string, cwd: string) => ({
-  hook_event_name: 'PreToolUse',
-  tool_name: 'Bash',
-  cwd,
-  tool_input: { command },
-});
-
-const commitChecks = (...checks: string[]) => ({ COMMIT_HOOK_CHECKS: JSON.stringify(checks) });
-
-describe('check-git-command', () => {
-  it('blocks a commit or a push on main', () => {
-    const cwd = tempRepo('main');
-    for (const command of ['git commit -m x', 'git push origin HEAD']) {
-      const { status, stderr } = runHook(
-        'check-git-command.ts',
-        bashCall(command, cwd),
-        commitChecks(PASS),
-      );
-      assert.equal(status, 2, command);
-      assert.match(stderr, /You are on `main`/);
-    }
-  });
-
-  it('allows other commands on main', () => {
-    const cwd = tempRepo('main');
-    for (const command of ['git status', 'pnpm test', 'echo git commit']) {
-      const result = runHook('check-git-command.ts', bashCall(command, cwd), commitChecks(FAIL));
-      assert.deepEqual(result, SILENT, command);
-    }
-  });
-
-  it('allows a commit on a branch when every check passes', () => {
-    const call = bashCall('git commit -m x', tempRepo('feat/1-x'));
-    assert.deepEqual(runHook('check-git-command.ts', call, commitChecks(PASS, PASS)), SILENT);
-  });
-
-  it('blocks a commit with the failing output when a check fails', () => {
-    const call = bashCall('git add -A && git commit -m x', tempRepo('feat/1-x'));
-    const { status, stderr } = runHook('check-git-command.ts', call, commitChecks(PASS, FAIL));
-    assert.equal(status, 2);
-    assert.match(stderr, /Commit blocked: `node -e .*` failed/);
-    assert.match(stderr, /boom/);
-  });
-
-  it('blocks a commit before pnpm install', () => {
-    const call = bashCall('git commit -m x', tempRepo('feat/1-x', { installed: false }));
-    const { status, stderr } = runHook('check-git-command.ts', call, commitChecks(PASS));
-    assert.equal(status, 2);
-    assert.match(stderr, /pnpm install/);
-  });
-
-  it('allows a push from a branch without running the checks', () => {
-    const call = bashCall('git push -u origin HEAD', tempRepo('feat/1-x'));
-    assert.deepEqual(runHook('check-git-command.ts', call, commitChecks(FAIL)), SILENT);
-  });
-
-  it('ignores input without a command and input that is not JSON', () => {
-    const edit = { hook_event_name: 'PreToolUse', tool_name: 'Edit', cwd: tempRepo('main') };
-    assert.deepEqual(runHook('check-git-command.ts', edit, commitChecks(FAIL)), SILENT);
-    assert.deepEqual(runHook('check-git-command.ts', 'not json', commitChecks(FAIL)), SILENT);
   });
 });
