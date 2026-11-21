@@ -1,5 +1,6 @@
 // Shared helpers for the Claude Code hook scripts in this folder.
 // Plain Node (no bash, jq or PowerShell), so the hooks run the same on Windows, macOS and Linux.
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -27,6 +28,46 @@ export function editedFilePath(input: HookInput | undefined): string | undefined
   const toolInput = input?.tool_input;
   if (!isRecord(toolInput)) return undefined;
   return typeof toolInput.file_path === 'string' ? toolInput.file_path : undefined;
+}
+
+/** The top folder of the git checkout `cwd` is in (a worktree's own folder), or `cwd` outside one. */
+export function repoRoot(cwd: string): string {
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' });
+  const top = result.status === 0 ? result.stdout.trim() : '';
+  return top === '' ? cwd : path.resolve(top);
+}
+
+/** Whether the working tree has changes. True when git can't tell, so checks still run. */
+export function hasChanges(cwd: string): boolean {
+  const result = spawnSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8' });
+  return result.status !== 0 || result.stdout.trim() !== '';
+}
+
+/** The checks to run: `defaults`, or a JSON array from `envName`, which the hook tests set. */
+export function readChecks(envName: string, defaults: string[]): string[] {
+  const override = process.env[envName];
+  if (!override) return defaults;
+  const checks: unknown = JSON.parse(override);
+  if (!Array.isArray(checks)) throw new TypeError(`${envName} must be a JSON array`);
+  return checks.map(String);
+}
+
+export type Failure = { check: string; output: string };
+
+const MAX_OUTPUT_CHARS = 4000;
+
+/** Runs the checks in order and returns the first one that fails. */
+export function findFailure(checks: string[], cwd: string): Failure | undefined {
+  for (const check of checks) {
+    // Fixed command strings, so running them through the platform's shell is safe. The shell
+    // finds `pnpm` on Linux and macOS and `pnpm.cmd` on Windows.
+    const result = spawnSync(check, { cwd, shell: true, encoding: 'utf8' });
+    if (result.status !== 0) {
+      const output = `${result.stdout}${result.stderr}${result.error?.message ?? ''}`;
+      return { check, output: output.slice(-MAX_OUTPUT_CHARS) };
+    }
+  }
+  return undefined;
 }
 
 /** The project root: where the Claude Code session started. */

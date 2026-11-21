@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.base.json",
-  "include": ["codegen.ts", ".claude/hooks"]
+  "include": ["codegen.ts", ".claude/hooks", ".githooks/*.ts"]
 }

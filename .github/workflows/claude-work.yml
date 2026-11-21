@@ -1,6 +1,6 @@
 name: Claude work
 
-# Called by claude-mention.yml, claude-build.yml and after-ci.yml.
+# Called by claude-mention.yml, claude-label.yml and after-ci.yml.
 #
 # One rule: a job that runs untrusted things holds no secret and no token that can change the
 # repo, and a job that holds them runs no untrusted things. Untrusted: issue and comment text,
@@ -21,7 +21,7 @@ on:
         type: string
         required: true
       trigger:
-        description: '`comment`, `label` (the `agent` label on an issue) or `ci-failure`.'
+        description: '`comment`, `label` (`agent:plan` or `agent:build` on an issue) or `ci-failure`.'
         type: string
         required: true
       number:
@@ -50,7 +50,7 @@ on:
         default: ''
       approved:
         description: >-
-          For `label`, the issue as it was when the label was added, from claude-build.yml: JSON with
+          For a `label` build, the issue as it was when the label was added, from claude-label.yml: JSON with
           `issue`, a hash of the title and description from the label event, `labeled_at`, the label's
           time, and `comments`, each earlier comment's id, updated_at, author_association and user.login.
         type: string
@@ -121,6 +121,11 @@ jobs:
               echo "::notice::#$NUMBER already had its automatic fix."
               exit 0
             fi
+          fi
+          # Removed as the plan starts, so adding the label again asks for a new plan.
+          if [ "$TRIGGER" = label ] && [ "$MODE" = plan ]; then
+            gh api --method DELETE "repos/$REPO/issues/$NUMBER/labels/agent%3Aplan" > /dev/null \
+              || echo "::warning::The \`agent:plan\` label could not be removed from #$NUMBER."
           fi
           {
             if [ "$MODE" = plan ]; then echo "Claude is writing a plan. ([run]($RUN_URL))"
@@ -200,7 +205,7 @@ jobs:
         name: Use main's agent rules, without the branch's symlinks
         timeout-minutes: 2
         run: |
-          rules='(^|/)\.claude/|^\.husky/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
+          rules='(^|/)\.claude/|^\.(husky|githooks)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           git fetch --quiet --no-tags --no-recurse-submodules --depth=1 origin main
           git ls-files -z | grep -zE "$rules" | xargs -0 -r rm -rf --
           # Whole `.claude/` folders, at any depth: main's are restored below.
@@ -248,21 +253,21 @@ jobs:
           jq '{number, title, body, author: .user.login, is_pr: (.pull_request != null)}' "$RUNNER_TEMP/issue.json" > issue.json
           gh api --paginate "repos/$REPO/issues/$NUMBER/comments" > "$RUNNER_TEMP/comments-pages.json"
           jq -s '[.[][]]' "$RUNNER_TEMP/comments-pages.json" > "$RUNNER_TEMP/comments.json"
-          if [ "$TRIGGER" = label ]; then
+          if [ "$TRIGGER" = label ] && [ "$MODE" = work ]; then
             # A build follows the issue as you approved it: its title, description and comments as they were when
-            # you added the label, recorded by claude-build.yml before the build waited for its turn. If one of
+            # you added the label, recorded by claude-label.yml before the build waited for its turn. If one of
             # those changed or was deleted since, nothing is built: you approve again.
             [ -n "$APPROVED" ] || { echo "::error::No record of the issue at approval."; exit 1; }
-            again="Remove the \`agent\` label and add it again to approve the issue as it is now."
-            if ! jq -e '[.labels[].name] | index("agent")' "$RUNNER_TEMP/issue.json" > /dev/null; then
-              echo "skip=The \`agent\` label was removed before the build started." >> "$GITHUB_OUTPUT"
+            again="Remove the \`agent:build\` label and add it again to approve the issue as it is now."
+            if ! jq -e '[.labels[].name] | index("agent:build")' "$RUNNER_TEMP/issue.json" > /dev/null; then
+              echo "skip=The \`agent:build\` label was removed before the build started." >> "$GITHUB_OUTPUT"
               exit 0
             fi
             printf '%s' "$APPROVED" > "$RUNNER_TEMP/approved.json"
-            # Keep this hash the same as in claude-build.yml.
+            # Keep this hash the same as in claude-label.yml.
             issue_hash=$(jq -j '.title, "\n", (.body // "")' "$RUNNER_TEMP/issue.json" | sha256sum | cut -d' ' -f1)
             if [ "$issue_hash" != "$(jq -r .issue "$RUNNER_TEMP/approved.json")" ]; then
-              echo "skip=The issue's title or description changed after you added the \`agent\` label. $again" >> "$GITHUB_OUTPUT"
+              echo "skip=The issue's title or description changed after you added the \`agent:build\` label. $again" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             changed=$(jq -r --slurpfile approved "$RUNNER_TEMP/approved.json" --argjson trusted "$trusted" --argjson bots "$bots" \
@@ -273,7 +278,7 @@ jobs:
                  | \"\(\$url)#issuecomment-\(.id)\"] | join(\", \")" \
               "$RUNNER_TEMP/comments.json")
             if [ -n "$changed" ]; then
-              echo "skip=A comment changed or was deleted after you added the \`agent\` label ($changed). $again" >> "$GITHUB_OUTPUT"
+              echo "skip=A comment changed or was deleted after you added the \`agent:build\` label ($changed). $again" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             # Comments posted after the approval are left out.
@@ -308,13 +313,22 @@ jobs:
               } > task.md
               ;;
             label)
-              cat > task.md <<'EOF'
+              if [ "$MODE" = plan ]; then
+                cat > task.md <<'EOF'
+          # Task
+
+          A maintainer added the `agent:plan` label to ask for a plan for this issue (`issue.json`).
+          Read the issue and every comment in `comments.json`. If a comment holds an earlier plan, write
+          a new one that follows the maintainer's corrections after it.
+          EOF
+              else
+                cat > task.md <<'EOF'
           # Task
 
           Build this issue (`issue.json`).
 
           1. Read the issue and every comment in `comments.json`: the comments as they were when the
-             maintainer added the `agent` label to approve. If a comment holds an implementation
+             maintainer added the `agent:build` label to approve. If a comment holds an implementation
              plan, the latest plan together with the maintainer's corrections after it is the approved
              plan: follow it, and where a correction disagrees with the plan, the correction wins. If
              there is no plan, build from the acceptance criteria.
@@ -322,6 +336,7 @@ jobs:
           3. In `reply`, give each acceptance criterion as met or not met, and say where you left the
              plan and why.
           EOF
+              fi
               ;;
             ci-failure)
               # The attempt that failed; the whole log first. Without the logs there's nothing to fix from, so the
@@ -433,7 +448,7 @@ jobs:
           git add -A
           # The same checks publish makes, here too so the reply can name the files. publish still checks the
           # final patch: the check job runs the branch's code, which can change files too.
-          protected='(^|/)\.claude/|^(\.github|\.husky|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
+          protected='(^|/)\.claude/|^(\.github|\.husky|\.githooks|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           # Line breaks removed: file names come from Claude, and a line break would start a new output.
           refused=$(git diff --cached --no-renames --name-only -z "$BASELINE" | grep -zE "$protected" | tr '\0\n\r' ',  ' || true)
           links=$(git diff --cached --no-renames --raw -z "$BASELINE" | tr '\0' '\n' | awk '/^:/ {mode = $2; next} mode ~ /^(120000|160000)$/ {print; mode = ""}' | tr '\n\r' ',,' || true)
@@ -606,7 +621,7 @@ jobs:
           [ -n "$PATCH" ] || fail "The changes were not published: GitHub dropped them because they looked like they contain a secret."
           printf '%s' "$PATCH" | base64 -d | gunzip > "$RUNNER_TEMP/changes.patch"
           git apply --index "$RUNNER_TEMP/changes.patch" || fail "The changes don't apply to the commit Claude worked from."
-          protected='(^|/)\.claude/|^(\.github|\.husky|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
+          protected='(^|/)\.claude/|^(\.github|\.husky|\.githooks|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           # Raw names: git puts names with unusual characters in quotes otherwise, and those would slip past the check.
           git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/paths" || fail "The changes were not published: the changed files could not be listed."
           refused=$(grep -zE "$protected" "$RUNNER_TEMP/paths" | tr '\0' ',' || true)
