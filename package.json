@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "turbo run dev",
     "test": "turbo run test && pnpm test:hooks",
-    "test:hooks": "node --test \".claude/hooks/*.test.ts\"",
+    "test:hooks": "node --test \".claude/hooks/*.test.ts\" \".githooks/*.test.ts\"",
+    "prepare": "git config core.hooksPath .githooks",
     "test:db": "pnpm --recursive --workspace-concurrency=1 run test:db",
     "test:e2e": "pnpm --filter ./apps/web run test:e2e",
     "lint": "oxlint",

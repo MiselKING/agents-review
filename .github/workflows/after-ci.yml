@@ -83,6 +83,8 @@ jobs:
         with:
           client-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # GitHub refuses `gh pr ready` to a token without contents write, though it changes no code.
+          permission-contents: write
           permission-pull-requests: write
       - name: Mark the draft PR ready
         timeout-minutes: 2

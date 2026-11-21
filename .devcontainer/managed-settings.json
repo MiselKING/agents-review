@@ -1,5 +1,11 @@
 {
   "permissions": {
-    "deny": ["Edit(**/AGENTS.md)", "Edit(**/CLAUDE.md)", "Edit(**/REVIEW.md)", "Edit(.claude/**)"]
+    "deny": [
+      "Edit(**/AGENTS.md)",
+      "Edit(**/CLAUDE.md)",
+      "Edit(**/REVIEW.md)",
+      "Edit(.claude/**)",
+      "Edit(.githooks/**)"
+    ]
   }
 }

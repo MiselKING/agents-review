@@ -19,6 +19,7 @@
             "Edit(**/CLAUDE.md)",
             "Edit(./REVIEW.md)",
             "Edit(./.claude/**)",
+            "Edit(./.githooks/**)",
             "Edit(./.github/**)",
             "Edit(./.devcontainer/**)",
             "Edit(./pnpm-workspace.yaml)",
@@ -68,7 +69,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/lint-edited-file.ts\"",
+                        "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/check-edited-file.ts\"",
                         "timeout": 30
                     }
                 ]
