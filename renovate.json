@@ -30,8 +30,15 @@
       "dependencyDashboardApproval": true
     },
     {
-      "description": "The CI image and the dev container feature must match @playwright/test",
+      "description": "One weekly PR for everything that isn't a major",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-non-major"
+    },
+    {
+      "description": "The CI image and the dev container feature must match @playwright/test; non-majors are already in the weekly group",
       "matchDepNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
+      "matchUpdateTypes": ["major"],
       "groupName": "playwright"
     },
     {
