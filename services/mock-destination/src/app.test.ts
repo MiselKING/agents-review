@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import type { Server } from 'node:http';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -22,7 +23,9 @@ async function start(options: Partial<AppOptions> = {}) {
     ...options,
   });
   servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, resolve));
+  // once() rejects on 'error', so a failed listen fails the test instead of hanging it.
+  server.listen(0);
+  await once(server, 'listening');
   const address = server.address();
   if (address === null || typeof address === 'string') throw new Error('Expected a TCP address');
   const baseUrl = `http://localhost:${address.port}`;

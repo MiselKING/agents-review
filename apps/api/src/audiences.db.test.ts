@@ -1,12 +1,27 @@
 import { createDb } from '@agents-review/db';
-import { afterAll, describe, expect, it } from 'vitest';
+import { inRollback } from '@agents-review/db/rollback';
+import { customers, events } from '@agents-review/db/schema';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { at, graphqlClient } from './test/graphql.ts';
 import { createApi } from './yoga.ts';
 
 const { db, pool } = createDb();
-const gql = graphqlClient(createApi(db));
+// One moment for every request, so time-window counts from different requests agree.
+const now = new Date();
+const gql = graphqlClient(createApi(db, { now: () => now }));
 const createdIds: string[] = [];
+
+const NAME_PREFIX = 'API test ';
+
+// Leftovers of a run that stopped before its cleanup.
+beforeAll(async () => {
+  await pool.query(
+    `delete from audiences a where name like $1
+       and not exists (select 1 from sync_runs r where r.audience_id = a.id)`,
+    [`${NAME_PREFIX}%`],
+  );
+});
 
 afterAll(async () => {
   await pool.query('delete from audiences where id = any($1::bigint[])', [createdIds]);
@@ -89,7 +104,8 @@ const everyKindFilter = {
   ],
 };
 
-const testName = (label: string) => `API test ${label} ${Date.now()}-${Math.random()}`;
+let nameCount = 0;
+const testName = (label: string) => `${NAME_PREFIX}${label} ${(nameCount += 1)}`;
 
 async function create(name: string, definition: unknown): Promise<string> {
   const body = await gql(CREATE, { input: { name, definition } });
@@ -134,7 +150,7 @@ describe('creating and loading', () => {
   });
 
   it('stores a name with quotes and SQL as plain text', async () => {
-    const name = `Robert'); drop table customers; -- "${Date.now()}"`;
+    const name = `${NAME_PREFIX}Robert'); drop table customers; -- "quoted"`;
     const customersBefore = await count('select count(*)::int as n from customers');
     const id = await create(name, countryFilter('DEU'));
     expect(at(await gql(LOAD, { id }), 'data', 'audience', 'name')).toBe(name);
@@ -356,6 +372,54 @@ describe('countries', () => {
     expect(names).toEqual(names.toSorted((a, b) => a.localeCompare(b, 'en')));
     expect(countries).toContainEqual({ code: 'DEU', name: 'Germany' });
   });
+});
+
+describe('clock', () => {
+  it('counts members at the moment the API is given, not the wall clock', () =>
+    inRollback(db, async (tx) => {
+      const moment = new Date('2026-01-15T12:00:00.000Z');
+      const [customer] = await tx
+        .insert(customers)
+        .values({
+          email: 'clock@api-test.example',
+          firstName: 'Clock',
+          lastName: 'Test',
+          country: 'ZZZ',
+          createdAt: new Date('2020-01-01T00:00:00.000Z'),
+        })
+        .returning({ id: customers.id });
+      if (!customer) throw new Error('Customer insert returned no row.');
+      await tx.insert(events).values({
+        customerId: customer.id,
+        type: 'purchase',
+        occurredAt: new Date(moment.getTime() - 30 * 24 * 60 * 60 * 1000),
+        properties: { amount_cents: 1000 },
+      });
+      const filter = {
+        match: 'ALL',
+        conditions: [
+          { attribute: { field: 'COUNTRY', operator: 'IS', value: 'ZZZ' } },
+          {
+            event: {
+              eventType: 'purchase',
+              operator: 'PERFORMED',
+              window: { amount: 30, unit: 'DAY' },
+            },
+          },
+        ],
+      };
+      const countAt = async (time: Date) =>
+        at(
+          await graphqlClient(createApi(tx, { now: () => time }))(PREVIEW, { definition: filter }),
+          'data',
+          'previewAudience',
+          'memberCount',
+        );
+
+      // The purchase is exactly 30 days before `moment`, and one millisecond later it is not.
+      expect(await countAt(moment)).toBe(1);
+      expect(await countAt(new Date(moment.getTime() + 1))).toBe(0);
+    }));
 });
 
 describe('hello', () => {

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", "schedule:weekly"],
+  "ignorePresets": [":pinDevDependencies"],
+  "minimumReleaseAge": "3 days",
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "minimumReleaseAge": "3 days"
+  },
+  "customManagers": [
+    {
+      "description": "Playwright version in the dev container feature, which must match @playwright/test",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.devcontainer/devcontainer\\.json$/",
+        "/^\\.devcontainer/features/playwright/devcontainer-feature\\.json$/"
+      ],
+      "matchStrings": [
+        "\"\\./features/playwright\":\\s*\\{\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\"",
+        "\"default\":\\s*\"(?<currentValue>[^\"]+)\",\\s*\"description\":\\s*\"Playwright version"
+      ],
+      "depNameTemplate": "@playwright/test",
+      "datasourceTemplate": "npm"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Majors wait for approval on the Dependency Dashboard",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "One weekly PR for everything that isn't a major",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-non-major"
+    },
+    {
+      "description": "The CI image and the dev container feature must match @playwright/test; non-majors are already in the weekly group",
+      "matchDepNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
+      "matchUpdateTypes": ["major"],
+      "groupName": "playwright"
+    },
+    {
+      "description": "Docker registries give no release date, so without this their updates would wait forever",
+      "matchDatasources": ["docker"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    }
+  ]
+}

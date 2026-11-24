@@ -1,6 +1,6 @@
 import { createDb } from '@agents-review/db';
 import { claimSyncRun, snapshotSyncRun } from '@agents-review/db/sync-runs';
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDestination } from './destination.ts';
 import { DEFAULT_POLICY } from './policy.ts';
@@ -14,6 +14,7 @@ const created = { audiences: [] as number[], countries: [] as string[] };
 const platforms: FakePlatform[] = [];
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(platforms.splice(0).map((platform) => platform.close()));
   await pool.query('delete from sync_runs where audience_id = any($1::bigint[])', [
     created.audiences,
@@ -25,6 +26,9 @@ afterEach(async () => {
 });
 
 const BATCH_SIZE = 100;
+// The workers' clock. Audiences here filter on country only, so its value changes no members.
+const NOW = new Date('2026-01-15T12:00:00.000Z');
+let audienceCount = 0;
 
 const firstRow = <T>(rows: T[]): T => {
   const [row] = rows;
@@ -34,10 +38,12 @@ const firstRow = <T>(rows: T[]): T => {
 
 /** An audience of `size` new customers in a country no seeded customer has, and its claimed run. */
 async function audienceWithRun(size: number) {
-  const country = `Q${String.fromCodePoint(65 + Math.floor(Math.random() * 26))}${String.fromCodePoint(65 + Math.floor(Math.random() * 26))}`;
+  const index = audienceCount;
+  audienceCount += 1;
+  const country = `Q${String.fromCodePoint(65 + Math.floor(index / 26))}${String.fromCodePoint(65 + (index % 26))}`;
   await pool.query('delete from customers where country = $1', [country]);
   created.countries.push(country);
-  const prefix = `sync-${country.toLowerCase()}-${Date.now()}-`;
+  const prefix = `sync-${country.toLowerCase()}-`;
   const customers = await pool.query<{ id: string }>(
     `insert into customers (email, first_name, last_name, country)
      select $1 || g || '@example.com', 'Sync', 'Test', $2 from generate_series(1, $3::int) g
@@ -80,7 +86,7 @@ async function startPlatform(script: Step[] = []) {
 }
 
 // Only tests where the platform hangs need a short deadline; a busy CI runner can be slower than one.
-function workerFor(platform: FakePlatform, timeoutMs = 2_000) {
+function workerFor(platform: FakePlatform, { timeoutMs = 2_000, now = NOW } = {}) {
   const sleeps: number[] = [];
   const lines: string[] = [];
   const controller = new AbortController();
@@ -93,7 +99,7 @@ function workerFor(platform: FakePlatform, timeoutMs = 2_000) {
       return Promise.resolve();
     },
     random: () => 0.5,
-    now: () => new Date(),
+    now: () => now,
     log: (line) => lines.push(line),
     signal: controller.signal,
   };
@@ -113,6 +119,14 @@ async function runRow(runId: number) {
     [runId],
   );
   return firstRow(result.rows);
+}
+
+async function heartbeatAt(runId: number) {
+  const result = await pool.query<{ heartbeat_at: Date }>(
+    'select heartbeat_at from sync_runs where id = $1',
+    [runId],
+  );
+  return firstRow(result.rows).heartbeat_at;
 }
 
 async function batchRows(runId: number) {
@@ -155,7 +169,7 @@ describe('processRun', () => {
   it('sends the members of the audience as it was when the run started', async () => {
     const platform = await startPlatform();
     const { audienceId, runId, customerIds } = await audienceWithRun(30);
-    await snapshotSyncRun(db, runId, BATCH_SIZE, new Date());
+    await snapshotSyncRun(db, runId, BATCH_SIZE, NOW);
     await pool.query(
       `update audiences set definition = jsonb_set(definition, '{conditions,0,value}', '"DEU"') where id = $1`,
       [audienceId],
@@ -168,7 +182,7 @@ describe('processRun', () => {
   it('retries server errors, timeouts and network errors with the same key and growing waits', async () => {
     const platform = await startPlatform(['fail-before', 'fail-after', 'drop', 'hang', 'ok']);
     const { audienceId, runId, customerIds } = await audienceWithRun(40);
-    const { deps, sleeps } = workerFor(platform, 300);
+    const { deps, sleeps } = workerFor(platform, { timeoutMs: 300 });
 
     await processRun(deps, runId);
 
@@ -331,7 +345,7 @@ describe('processRun', () => {
   it('leaves out customers deleted after the snapshot', async () => {
     const platform = await startPlatform();
     const { audienceId, runId, customerIds } = await audienceWithRun(5);
-    await snapshotSyncRun(db, runId, BATCH_SIZE, new Date());
+    await snapshotSyncRun(db, runId, BATCH_SIZE, NOW);
     await pool.query('delete from customers where id = $1', [customerIds[0]]);
 
     await processRun(workerFor(platform).deps, runId);
@@ -341,7 +355,7 @@ describe('processRun', () => {
   it('resumes a run whose worker died: only unsent batches go out, with their original keys', async () => {
     const platform = await startPlatform();
     const { audienceId, runId, customerIds } = await audienceWithRun(250);
-    await snapshotSyncRun(db, runId, BATCH_SIZE, new Date());
+    await snapshotSyncRun(db, runId, BATCH_SIZE, NOW);
     await pool.query(
       `update sync_batches set status = 'sent', attempts = 1 where run_id = $1 and batch_index = 0`,
       [runId],
@@ -394,81 +408,74 @@ describe('processRun', () => {
     expect(await processRun(first.deps, runId)).toBe('stopped');
     expect(await batchRows(runId)).toMatchObject([{ status: 'pending', attempts: 2 }]);
 
-    const second = workerFor(platform);
+    // The second worker starts 1 s after the first one scheduled its 2125 ms wait.
+    const second = workerFor(platform, { now: new Date(NOW.getTime() + 1000) });
     await processRun(second.deps, runId);
 
     expect(platform.requests).toHaveLength(5);
-    const [resumeWait = 0, ...retryWaits] = second.sleeps;
-    expect(resumeWait).toBeGreaterThan(1000);
-    expect(resumeWait).toBeLessThanOrEqual(2125);
-    expect(retryWaits).toEqual([4125, 8125]);
+    expect(second.sleeps).toEqual([1125, 4125, 8125]);
     expect(await batchRows(runId)).toMatchObject([{ status: 'failed', attempts: 5 }]);
   });
 
+  // Heartbeats run on setInterval; these tests fake it and fire it by hand.
   it('keeps the run’s heartbeat fresh while it works, and stops it afterwards', async () => {
-    const platform = await startPlatform(['hang', 'ok']);
+    const platform = await startPlatform();
     const { runId } = await audienceWithRun(10);
     await pool.query(
       `update sync_runs set heartbeat_at = now() - interval '30 seconds' where id = $1`,
       [runId],
     );
-    const { deps } = workerFor(platform, 300);
-    deps.policy = { ...deps.policy, heartbeatMs: 50 };
-    const heartbeat = async () =>
-      firstRow(
-        (
-          await pool.query<{ heartbeat_at: Date; age_ms: string }>(
-            `select heartbeat_at, extract(epoch from clock_timestamp() - heartbeat_at) * 1000 as age_ms
-             from sync_runs where id = $1`,
-            [runId],
-          )
-        ).rows,
-      );
+    const stale = await heartbeatAt(runId);
 
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const { deps } = workerFor(platform);
+    platform.hooks.onRequest = () => vi.advanceTimersByTime(deps.policy.heartbeatMs);
     await processRun(deps, runId);
-    const after = await heartbeat();
-    expect(Number(after.age_ms)).toBeLessThan(1000);
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    expect((await heartbeat()).heartbeat_at).toEqual(after.heartbeat_at);
+    expect((await heartbeatAt(runId)).getTime()).toBeGreaterThan(stale.getTime());
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('waits for a heartbeat write still in flight before it returns', async () => {
-    const platform = await startPlatform(['hang']);
+    const platform = await startPlatform();
     const { runId } = await audienceWithRun(10);
     // Snapshot first, so from here on only heartbeats write to the run's row.
-    await snapshotSyncRun(db, runId, BATCH_SIZE, new Date());
-    const { deps, controller } = workerFor(platform, 300);
-    deps.policy = { ...deps.policy, heartbeatMs: 50 };
-    platform.hooks.onRequest = () => controller.abort();
-    const heartbeatAt = async () =>
-      firstRow(
-        (
-          await pool.query<{ heartbeat_at: Date }>(
-            'select heartbeat_at from sync_runs where id = $1',
-            [runId],
-          )
-        ).rows,
-      ).heartbeat_at;
-    const before = await heartbeatAt();
+    await snapshotSyncRun(db, runId, BATCH_SIZE, NOW);
+    const before = await heartbeatAt(runId);
 
-    // Holding the row lock makes each heartbeat write wait until the lock is released.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const { deps, controller } = workerFor(platform);
+    const { promise: stopped, resolve: onStopped } = Promise.withResolvers<void>();
+    deps.log = (line) => {
+      if (line.endsWith('it resumes later')) onStopped();
+    };
+    platform.hooks.onRequest = () => {
+      vi.advanceTimersByTime(deps.policy.heartbeatMs);
+      controller.abort();
+    };
+
+    // Holding the row lock makes the heartbeat write wait until the lock is released.
     const lock = await pool.connect();
     await lock.query('begin');
     await lock.query('select id from sync_runs where id = $1 for update', [runId]);
-    const released = (async () => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+    let returned = false;
+    const processing = processRun(deps, runId).finally(() => {
+      returned = true;
+    });
+    try {
+      // A failing run rejects here instead of leaving the lock held.
+      await Promise.race([stopped, processing]);
+      await new Promise((resolve) => {
+        setImmediate(resolve);
+      });
+      expect(returned).toBe(false);
+    } finally {
       await lock.query('commit');
       lock.release();
-    })();
+    }
 
-    expect(await processRun(deps, runId)).toBe('stopped');
-    const returned = await heartbeatAt();
-    await released;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    expect(returned.getTime()).toBeGreaterThan(before.getTime());
-    expect(await heartbeatAt()).toEqual(returned);
+    expect(await processing).toBe('stopped');
+    expect((await heartbeatAt(runId)).getTime()).toBeGreaterThan(before.getTime());
   });
 
   it('still syncs an audience archived after its run started', async () => {

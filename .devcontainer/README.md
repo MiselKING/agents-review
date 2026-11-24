@@ -121,7 +121,7 @@ rm -rf ~/agents-review
 
 ## Upgrades
 
-Chromium and Claude Code are built into the image. After a Playwright upgrade, set the playwright feature's `version` in `.devcontainer/devcontainer.json` and the Playwright image in `.github/workflows/ci.yml`; for Claude Code, set `CLAUDE_CODE_VERSION` in `.devcontainer/compose.yaml`. Then rebuild: `devcontainer up --workspace-folder ~/agents-review --remove-existing-container`.
+Chromium and Claude Code are built into the image. Renovate updates Playwright in its weekly PR: `@playwright/test`, the playwright feature's `version` in `.devcontainer/devcontainer.json` and the Playwright image in `.github/workflows/ci.yml`. For Claude Code, set `CLAUDE_CODE_VERSION` in `.devcontainer/compose.yaml` by hand. After either upgrade, rebuild: `devcontainer up --workspace-folder ~/agents-review --remove-existing-container`.
 
 ## Risks
 

@@ -64,7 +64,9 @@ describe('main', () => {
 
   it.each(['SIGINT', 'SIGTERM'])('stops on %s and exits with 0', async (signal) => {
     const { signals, lines, running, exit } = setup();
-    const deps = await running;
+    const first = await Promise.race([running, exit]);
+    if (typeof first === 'number') throw new Error(`main exited with ${first} before starting.`);
+    const deps = first;
     expect(deps.policy).toBe(DEFAULT_POLICY);
     expect(deps.signal.aborted).toBe(false);
 
@@ -96,11 +98,13 @@ describe('main', () => {
 describe('sleep', () => {
   it('ends early, without an error, when told to stop', async () => {
     const controller = new AbortController();
-    const started = Date.now();
     const waiting = sleep(60_000, controller.signal);
     controller.abort();
-    await expect(waiting).resolves.toBeUndefined();
-    expect(Date.now() - started).toBeLessThan(1000);
+    // An aborted sleep settles before the next turn of the event loop; a running timer would not.
+    const nextTurn = new Promise<'still waiting'>((resolve) => {
+      setImmediate(() => resolve('still waiting'));
+    });
+    expect(await Promise.race([waiting, nextTurn])).toBeUndefined();
   });
 });
 
