@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import { createServer } from 'node:http';
 
 import { IDEMPOTENCY_CONFLICT_STATUS } from '@agents-review/shared/ad-platform';
@@ -90,7 +91,9 @@ export async function startFakePlatform(script: Step[] = []) {
     });
   });
 
-  await new Promise<void>((resolve) => server.listen(0, resolve));
+  // once() rejects on 'error', so a failed listen fails the test instead of hanging it.
+  server.listen(0);
+  await once(server, 'listening');
   const address = server.address();
   if (address === null || typeof address === 'string') throw new Error('Expected a TCP address');
 

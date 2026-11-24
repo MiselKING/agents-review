@@ -64,7 +64,9 @@ describe('main', () => {
 
   it.each(['SIGINT', 'SIGTERM'])('stops on %s and exits with 0', async (signal) => {
     const { signals, lines, running, exit } = setup();
-    const deps = await running;
+    const first = await Promise.race([running, exit]);
+    if (typeof first === 'number') throw new Error(`main exited with ${first} before starting.`);
+    const deps = first;
     expect(deps.policy).toBe(DEFAULT_POLICY);
     expect(deps.signal.aborted).toBe(false);
 

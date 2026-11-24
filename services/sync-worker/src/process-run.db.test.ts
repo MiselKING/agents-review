@@ -463,7 +463,8 @@ describe('processRun', () => {
       returned = true;
     });
     try {
-      await stopped;
+      // A failing run rejects here instead of leaving the lock held.
+      await Promise.race([stopped, processing]);
       await new Promise((resolve) => {
         setImmediate(resolve);
       });
