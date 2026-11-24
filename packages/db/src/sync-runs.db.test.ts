@@ -19,7 +19,7 @@ async function runOf(
   const [audience] = await tx
     .insert(audiences)
     .values({
-      name: `Claim test ${values.day} ${Date.now()}`,
+      name: `Claim test ${values.day}`,
       definition: { version: 1, match: 'all', conditions: [] },
     })
     .returning({ id: audiences.id });

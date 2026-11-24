@@ -8,6 +8,6 @@ import { resolvers } from './resolvers.ts';
 const schema = createSchema<ApiContext>({ typeDefs, resolvers });
 
 /** The GraphQL server. Errors other than GraphQLError reach clients as "Unexpected error." */
-export function createApi(db: Queryable) {
-  return createYoga({ schema, context: () => ({ db, now: new Date() }) });
+export function createApi(db: Queryable, { now = () => new Date() }: { now?: () => Date } = {}) {
+  return createYoga({ schema, context: () => ({ db, now: now() }) });
 }

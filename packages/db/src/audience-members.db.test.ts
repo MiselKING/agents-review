@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { countAudienceMembers, listAudienceMembers } from './audience-members.ts';
 import { createDb } from './client.ts';
 import { customers, events } from './schema.ts';
+import { seedDatabase } from './seed-database.ts';
 
 const { db, pool } = createDb();
 afterAll(() => pool.end());
@@ -18,13 +19,15 @@ let allCustomers: { id: number; country: string; createdAt: Date }[] = [];
 let allEvents: { customerId: number; type: string; occurredAt: Date }[] = [];
 
 beforeAll(async () => {
+  // Seeded from the same moment the filters use, so the time windows always have members.
+  await seedDatabase(db, now);
   allCustomers = await db
     .select({ id: customers.id, country: customers.country, createdAt: customers.createdAt })
     .from(customers);
   allEvents = await db
     .select({ customerId: events.customerId, type: events.type, occurredAt: events.occurredAt })
     .from(events);
-});
+}, 30_000);
 
 // Calendar math (month lengths, time zone) comes from Postgres, written differently from the
 // code under test; which customers match is decided here in plain TypeScript.

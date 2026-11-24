@@ -96,11 +96,13 @@ describe('main', () => {
 describe('sleep', () => {
   it('ends early, without an error, when told to stop', async () => {
     const controller = new AbortController();
-    const started = Date.now();
     const waiting = sleep(60_000, controller.signal);
     controller.abort();
-    await expect(waiting).resolves.toBeUndefined();
-    expect(Date.now() - started).toBeLessThan(1000);
+    // An aborted sleep settles before the next turn of the event loop; a running timer would not.
+    const nextTurn = new Promise<'still waiting'>((resolve) => {
+      setImmediate(() => resolve('still waiting'));
+    });
+    expect(await Promise.race([waiting, nextTurn])).toBeUndefined();
   });
 });
 

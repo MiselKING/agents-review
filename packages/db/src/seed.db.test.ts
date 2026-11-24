@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDb } from './client.ts';
 import { customers, events } from './schema.ts';
@@ -26,22 +26,26 @@ async function snapshot() {
   return result.rows[0];
 }
 
+const now = new Date();
+let first: Awaited<ReturnType<typeof snapshot>>;
+
+// Every test here reads rows seeded from `now`, whichever tests run.
+beforeAll(async () => {
+  await seedDatabase(db, now);
+  first = await snapshot();
+}, 30_000);
+
 describe('seedDatabase', () => {
   it('loads the same rows every time it runs, in under 30 seconds', async () => {
-    const now = new Date();
     const started = Date.now();
     await seedDatabase(db, now);
     expect(Date.now() - started).toBeLessThan(30_000);
-    const first = await snapshot();
-
-    await seedDatabase(db, now);
     const second = await snapshot();
 
     expect(first?.customers).toBe(String(SEED_CUSTOMER_COUNT));
     expect(first?.events).toBe(String(SEED_PURCHASE_COUNT + SEED_PAGE_VIEW_COUNT));
     expect(first?.checksum).toHaveLength(32);
     expect(second).toEqual(first);
-    // Two full seed runs; the 30-second limit above is per run.
   }, 60_000);
 
   it('loads purchases and page views across 10 countries', async () => {
@@ -67,8 +71,8 @@ describe('seedDatabase', () => {
         latest: sql<Date>`max(${events.occurredAt})`.mapWith(events.occurredAt),
       })
       .from(events);
-    const windowStart = Date.now() - SEED_EVENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const windowStart = now.getTime() - SEED_EVENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     expect(range?.earliest.getTime()).toBeGreaterThanOrEqual(windowStart);
-    expect(range?.latest.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(range?.latest.getTime()).toBeLessThanOrEqual(now.getTime());
   });
 });
