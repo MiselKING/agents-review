@@ -11,8 +11,8 @@ name: Claude work
 #   files but runs no commands; the job hands its changes on as a patch.
 # - check (no secrets, read-only GITHUB_TOKEN): applies the patch, runs codegen and format,
 #   then lint, typecheck and the unit tests, and hands on the final patch.
-# - publish (environment `publish`, App token): no Claude and no install. Checks and applies
-#   the patch, commits, pushes, opens the PR for an issue, and posts Claude's reply.
+# - publish (environment `publish`, App token): no Claude, no checkout and no install. Checks and
+#   commits the patch in a bare repository, pushes, opens the PR for an issue, and posts Claude's reply.
 on:
   workflow_call:
     inputs:
@@ -450,7 +450,7 @@ jobs:
           # final patch: the check job runs the branch's code, which can change files too.
           protected='(^|/)\.claude/|^(\.github|\.husky|\.githooks|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           # Line breaks removed: file names come from Claude, and a line break would start a new output.
-          refused=$(git diff --cached --no-renames --name-only -z "$BASELINE" | grep -zE "$protected" | tr '\0\n\r' ',  ' || true)
+          refused=$(git diff --cached --no-renames --name-only -z "$BASELINE" | grep -ziE "$protected" | tr '\0\n\r' ',  ' || true)
           links=$(git diff --cached --no-renames --raw -z "$BASELINE" | tr '\0' '\n' | awk '/^:/ {mode = $2; next} mode ~ /^(120000|160000)$/ {print; mode = ""}' | tr '\n\r' ',,' || true)
           reason=''
           if [ -n "$refused" ]; then reason="they touch files agents may not change: ${refused%,}"; fi
@@ -571,6 +571,7 @@ jobs:
           # The logs stay in this job's output for the details.
           tail -n 40 "$RUNNER_TEMP"/*.log 2>/dev/null || true
 
+  # A job that holds a secret or a write token never runs branch code; ack and publish never check it out.
   publish:
     needs: [ack, work, check]
     # Always, also on a cancelled run, so "Working on it" is always replaced. Nothing is pushed on a cancelled run.
@@ -590,15 +591,7 @@ jobs:
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
-      # The commit Claude worked from: the PR's head, or main's commit for a new branch.
-      - if: ${{ success() && !cancelled() && needs.check.result == 'success' && needs.check.outputs.has_patch == 'true' }}
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        timeout-minutes: 2
-        with:
-          ref: ${{ needs.work.outputs.base_sha }}
-          fetch-depth: 1
-          token: ${{ steps.app.outputs.token }}
-      # Applying a patch only writes files. Nothing from the branch is installed or run here.
+      # A bare repository has no working tree: the branch's files are never written out, so nothing can run them.
       - id: push
         if: ${{ success() && !cancelled() && needs.check.result == 'success' && needs.check.outputs.has_patch == 'true' }}
         name: Check, commit and push the changes
@@ -620,39 +613,60 @@ jobs:
           # GitHub drops a job output that holds a secret, so an empty patch here means it was dropped.
           [ -n "$PATCH" ] || fail "The changes were not published: GitHub dropped them because they looked like they contain a secret."
           printf '%s' "$PATCH" | base64 -d | gunzip > "$RUNNER_TEMP/changes.patch"
-          git apply --index "$RUNNER_TEMP/changes.patch" || fail "The changes don't apply to the commit Claude worked from."
+          # The token reaches git through the environment, for the fetch and the push only: never on disk or in arguments.
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          remote() {
+            GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.$SERVER_URL/.extraheader" \
+              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth" git "$@"
+          }
+          origin="$SERVER_URL/$REPO.git"
+          git init --quiet --bare --template= "$RUNNER_TEMP/publish.git"
+          cd "$RUNNER_TEMP/publish.git"
+          # The commit Claude worked from: the PR's head, or main's commit for a new branch.
+          remote fetch --quiet --no-tags --no-recurse-submodules --depth=1 "$origin" "$BASE_SHA" \
+            || fail "The changes were not published: the commit Claude worked from could not be fetched."
+          git read-tree "$BASE_SHA"
+          git apply --cached "$RUNNER_TEMP/changes.patch" || fail "The changes don't apply to the commit Claude worked from."
           protected='(^|/)\.claude/|^(\.github|\.husky|\.githooks|\.devcontainer|claude-context)/|^(\.mcp\.json|\.claude\.json|\.gitmodules|\.ripgreprc|REVIEW\.md)$|(^|/)(AGENTS\.md|CLAUDE\.md|CLAUDE\.local\.md)$'
           # Raw names: git puts names with unusual characters in quotes otherwise, and those would slip past the check.
-          git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/paths" || fail "The changes were not published: the changed files could not be listed."
-          refused=$(grep -zE "$protected" "$RUNNER_TEMP/paths" | tr '\0' ',' || true)
+          git diff --cached --no-renames --name-only -z "$BASE_SHA" > "$RUNNER_TEMP/paths" || fail "The changes were not published: the changed files could not be listed."
+          # Any letter case: on Windows and macOS `.CLAUDE/` is the same folder as `.claude/`.
+          refused=$(grep -ziE "$protected" "$RUNNER_TEMP/paths" | tr '\0' ',' || true)
           [ -z "$refused" ] || fail "The changes were not published: they touch files agents may not change: ${refused%,}."
           # A symlink or submodule could point outside the repository.
-          links=$(git diff --cached --no-renames --raw | awk '$2 ~ /^(120000|160000)$/ {print $NF}')
+          git diff --cached --no-renames --raw "$BASE_SHA" > "$RUNNER_TEMP/raw" || fail "The changes were not published: the changed files could not be listed."
+          links=$(awk '$2 ~ /^(120000|160000)$/ {print $NF}' "$RUNNER_TEMP/raw")
           [ -z "$links" ] || fail "The changes were not published: they add a symlink or submodule: $(echo "$links" | paste -sd, -)."
-          jq -r .commit_message <<< "$RESULT" > "$RUNNER_TEMP/message.txt"
-          [ -n "$(head -n 1 "$RUNNER_TEMP/message.txt")" ] || fail "The changes were not published: Claude gave no commit message."
+          jq -r .commit_message <<< "$RESULT" > "$RUNNER_TEMP/message.raw"
+          # commit-tree cleans up no whitespace and accepts an empty message, unlike git commit.
+          git stripspace < "$RUNNER_TEMP/message.raw" > "$RUNNER_TEMP/message.txt"
+          [ -s "$RUNNER_TEMP/message.txt" ] || fail "The changes were not published: Claude gave no commit message."
           bot="${APP_SLUG}[bot]"
           id=$(gh api "users/$bot" --jq .id)
-          git -c user.name="$bot" -c user.email="$id+$bot@users.noreply.github.com" -c core.hooksPath=/dev/null \
-            commit --quiet --no-verify -F "$RUNNER_TEMP/message.txt"
+          tree=$(git write-tree)
+          # commit-tree runs no hooks.
+          commit=$(git -c user.name="$bot" -c user.email="$id+$bot@users.noreply.github.com" \
+            commit-tree "$tree" -p "$BASE_SHA" -F "$RUNNER_TEMP/message.txt")
           if [ -n "$BRANCH" ]; then
             [ "$(gh api "repos/$REPO/pulls/$NUMBER" --jq .state)" = open ] \
               || fail "The changes were not published: the PR was closed while Claude worked."
             # Only if the branch is still where Claude started, so a moved branch isn't overwritten and a deleted one
             # isn't recreated. The push is a fast-forward, so the ruleset against force pushes doesn't apply.
-            git push --quiet --force-with-lease="refs/heads/$BRANCH:$BASE_SHA" origin "HEAD:refs/heads/$BRANCH" \
+            remote push --quiet --force-with-lease="refs/heads/$BRANCH:$BASE_SHA" "$origin" "$commit:refs/heads/$BRANCH" \
               || fail "The changes were not published: the branch moved or was deleted while Claude worked. Ask again."
             # Built locally: no request after the push that a cancellation could interrupt.
-            echo "url=$SERVER_URL/$REPO/commit/$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            echo "url=$SERVER_URL/$REPO/commit/$commit" >> "$GITHUB_OUTPUT"
           else
             # The attempt too: a re-run keeps the run id, and an earlier attempt may have pushed its branch already.
             branch="claude/issue-$NUMBER-$RUN_ID-$RUN_ATTEMPT"
             # Only as a new branch: never on top of one that already exists.
-            git push --quiet --force-with-lease="refs/heads/$branch:" origin "HEAD:refs/heads/$branch" \
+            remote push --quiet --force-with-lease="refs/heads/$branch:" "$origin" "$commit:refs/heads/$branch" \
               || fail "The changes were not published: the branch $branch could not be created."
             title=$(head -n 1 "$RUNNER_TEMP/message.txt")
             { printf 'Closes #%s\n\n' "$NUMBER"; jq -r .reply <<< "$RESULT"; } > "$RUNNER_TEMP/pr-body.md"
-            url=$(gh pr create --repo "$REPO" --draft --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md") \
+            url=$(gh api --method POST "repos/$REPO/pulls" -f title="$title" -f head="$branch" -f base=main -F draft=true \
+              -F "body=@$RUNNER_TEMP/pr-body.md" --jq .html_url) \
               || fail "The changes are on the branch \`$branch\`, but the draft PR could not be opened. Open it from $SERVER_URL/$REPO/compare/main...$branch?expand=1"
             echo "url=$url" >> "$GITHUB_OUTPUT"
           fi

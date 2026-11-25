@@ -76,7 +76,11 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 - Reviewers: Claude, CodeRabbit, Copilot code review (about 5 PRs)
 - Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills, hooks in `.claude/hooks/` (format and lint after each edit, lint and typecheck before Claude finishes), git hooks in `.githooks/` for every agent and person (no commit or push on `main`; `pnpm install` turns them on), `.mcp.json`, dev container with a default-deny firewall, where agents can't edit agent config. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
 - Writing issues: the issue forms on GitHub, or `/write-issue` in Claude Code with short notes (format in `.claude/skills/write-issue/SKILL.md`)
-- Side flows: Renovate dependency PRs, weekly docs sync, visual change requests
+- Side flows:
+  - Renovate dependency PRs
+  - Dependabot alerts + CodeQL in project settings
+  - Weekly docs sync
+  - Visual change requests
 - Measurement: 12 fixed tasks, run with a bare setup (Phase 4) and the full setup (Phase 7), 2 runs each
 - All tools free on a public repo. The only paid extra is the optional Copilot comparison: one month of Copilot Pro ($10).
 
@@ -84,7 +88,8 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 Not needed to run the app; this is what the workflows in GitHub rely on (details in the [plan](docs/_project-plan.md)):
 - Environment `claude`, limited to `main`: secret `CLAUDE_CODE_OAUTH_TOKEN`, from `claude setup-token`.
 - New GitHub App (Contents, Pull requests and Issues: read and write; no Workflows), installed on this repo only. Created via "Settings -> Developer settings -> New app"
-- Environment `publish`, limited to `main`: the App's private key as secret `APP_PRIVATE_KEY`, its Client ID as variable `APP_CLIENT_ID`, and secret `CODERABBIT_REQUEST_TOKEN`: your fine-grained token for this repo only, Pull requests read and write. CodeRabbit ignores requests from the App.
+- Environment `publish`, limited to `main`: the App's private key as secret `APP_PRIVATE_KEY`, and its Client ID as variable `APP_CLIENT_ID`.
+- Environment `coderabbit`, limited to `main`, with you as required reviewer and "Prevent self-review" off: secret `CODERABBIT_REQUEST_TOKEN`, your fine-grained token for this repo only, Pull requests read and write. CodeRabbit ignores requests from the App. Each CodeRabbit review waits for your approval.
 - Repository variable `APP_BOT_LOGIN`: the App's slug, from its URL (`github.com/apps/<slug>`), plus `[bot]`.
 - CodeRabbit installed, with a review seat assigned to the App's bot (it skips PRs opened by a bot without one), and the rulesets on `main`.
 

@@ -7,7 +7,7 @@ run-name: >-
       github.event.workflow_run.conclusion)
   }}
 
-# CI finished on a PR. Passed: mark a draft ready, Claude reviews, then CodeRabbit is asked to.
+# CI finished on a PR. Passed: mark a draft ready, Claude reviews, then CodeRabbit is asked to once you approve.
 # Failed: Claude tries one fix per PR (claude-work.yml does the work).
 # GitHub runs this file as it is on main, also for PRs that change it.
 on:
@@ -269,6 +269,8 @@ jobs:
 
   # CodeRabbit can't wait for CI itself, so its automatic reviews are off in .coderabbit.yaml.
   # After Claude's review is posted, even if it failed, so neither review can block the other.
+  # The coderabbit environment requires your approval, so you can skip a review: rejecting posts nothing
+  # and fails this run, which is not a PR check.
   coderabbit:
     needs: [pr, claude-review, post-review]
     if: >-
@@ -279,9 +281,14 @@ jobs:
         needs.claude-review.result != 'cancelled' &&
         needs.claude-review.outputs.stale != 'true'
       }}
+    # A newer passing CI run on the PR cancels an older request still waiting. If CI fails on a newer commit the
+    # older request stays, but approving it posts nothing: the head check below sees the PR has moved on.
+    concurrency:
+      group: coderabbit-${{ needs.pr.outputs.number }}
+      cancel-in-progress: true
     runs-on: ubuntu-26.04
     timeout-minutes: 5
-    environment: publish
+    environment: coderabbit
     permissions: {}
     steps:
       - name: Ask CodeRabbit to review
