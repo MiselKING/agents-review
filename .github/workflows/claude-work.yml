@@ -638,15 +638,16 @@ jobs:
           git diff --cached --no-renames --raw "$BASE_SHA" > "$RUNNER_TEMP/raw" || fail "The changes were not published: the changed files could not be listed."
           links=$(awk '$2 ~ /^(120000|160000)$/ {print $NF}' "$RUNNER_TEMP/raw")
           [ -z "$links" ] || fail "The changes were not published: they add a symlink or submodule: $(echo "$links" | paste -sd, -)."
-          jq -r .commit_message <<< "$RESULT" > "$RUNNER_TEMP/message.txt"
-          [ -n "$(head -n 1 "$RUNNER_TEMP/message.txt")" ] || fail "The changes were not published: Claude gave no commit message."
+          jq -r .commit_message <<< "$RESULT" > "$RUNNER_TEMP/message.raw"
+          # commit-tree cleans up no whitespace and accepts an empty message, unlike git commit.
+          git stripspace < "$RUNNER_TEMP/message.raw" > "$RUNNER_TEMP/message.txt"
+          [ -s "$RUNNER_TEMP/message.txt" ] || fail "The changes were not published: Claude gave no commit message."
           bot="${APP_SLUG}[bot]"
           id=$(gh api "users/$bot" --jq .id)
-          git stripspace < "$RUNNER_TEMP/message.txt" > "$RUNNER_TEMP/message"
           tree=$(git write-tree)
           # commit-tree runs no hooks.
           commit=$(git -c user.name="$bot" -c user.email="$id+$bot@users.noreply.github.com" \
-            commit-tree "$tree" -p "$BASE_SHA" -F "$RUNNER_TEMP/message")
+            commit-tree "$tree" -p "$BASE_SHA" -F "$RUNNER_TEMP/message.txt")
           if [ -n "$BRANCH" ]; then
             [ "$(gh api "repos/$REPO/pulls/$NUMBER" --jq .state)" = open ] \
               || fail "The changes were not published: the PR was closed while Claude worked."

@@ -76,7 +76,7 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 - Reviewers: Claude, CodeRabbit, Copilot code review (about 5 PRs)
 - Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills, hooks in `.claude/hooks/` (format and lint after each edit, lint and typecheck before Claude finishes), git hooks in `.githooks/` for every agent and person (no commit or push on `main`; `pnpm install` turns them on), `.mcp.json`, dev container with a default-deny firewall, where agents can't edit agent config. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
 - Writing issues: the issue forms on GitHub, or `/write-issue` in Claude Code with short notes (format in `.claude/skills/write-issue/SKILL.md`)
-- Side flows: 
+- Side flows:
   - Renovate dependency PRs
   - Dependabot alerts + CodeQL in project settings
   - Weekly docs sync

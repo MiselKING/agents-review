@@ -281,7 +281,8 @@ jobs:
         needs.claude-review.result != 'cancelled' &&
         needs.claude-review.outputs.stale != 'true'
       }}
-    # A newer CI run on the PR cancels an older request still waiting for approval.
+    # A newer passing CI run on the PR cancels an older request still waiting. If CI fails on a newer commit the
+    # older request stays, but approving it posts nothing: the head check below sees the PR has moved on.
     concurrency:
       group: coderabbit-${{ needs.pr.outputs.number }}
       cancel-in-progress: true
