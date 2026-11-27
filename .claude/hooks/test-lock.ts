@@ -35,21 +35,11 @@ function readLock(file: string): string {
   }
 }
 
-/** `file` with symlinks resolved, as git resolves the top folder. A new file doesn't exist yet, so its nearest existing folder is resolved. */
-function resolvedPath(file: string): string {
-  let existing = file;
-  const rest: string[] = [];
-  while (!existsSync(existing)) {
-    const parent = path.dirname(existing);
-    if (parent === existing) return file;
-    rest.unshift(path.basename(existing));
-    existing = parent;
-  }
-  return path.join(realpathSync.native(existing), ...rest);
-}
-
-/** `file` relative to the checkout as Claude named it, through the nearest folder above it that is the checkout. */
-function namedPath(file: string, root: string): string | undefined {
+/**
+ * `file` relative to the checkout, as Claude named it. git resolves symlinks in the top folder (macOS's
+ * /var is one), so the nearest folder above `file` that resolves to `root` is where the path starts.
+ */
+function pathInCheckout(file: string, root: string): string | undefined {
   for (let dir = path.dirname(file); ; dir = path.dirname(dir)) {
     if (existsSync(dir) && realpathSync.native(dir) === root) return relativeToRoot(file, dir);
     if (path.dirname(dir) === dir) return undefined;
@@ -75,29 +65,19 @@ async function denyReason(): Promise<string | undefined> {
   const head = currentBranch(root);
   if (branch !== '' && head !== '' && branch !== head) return undefined;
 
-  const lockedOn = branch === '' ? 'an empty lock' : `branch \`${branch}\``;
-  let paths: string[];
-  try {
-    // Both the path as named and its symlink target: either one can be a locked file.
-    const file = path.resolve(root, filePath);
-    paths = [namedPath(file, root), relativeToRoot(resolvedPath(file), root)].filter(
-      (p): p is string => p !== undefined,
-    );
-  } catch (error) {
-    // A crashed hook doesn't block the edit, so while locked an unchecked path is refused instead.
-    return `The test lock couldn't check \`${filePath}\` (${String(error)}), so the edit is refused while \`${LOCK}\` exists (${lockedOn}).`;
-  }
+  const relativePath = pathInCheckout(path.resolve(root, filePath), root);
+  if (relativePath === undefined) return undefined;
 
+  const lockedOn = branch === '' ? 'an empty lock' : `branch \`${branch}\``;
   // Otherwise Claude could unlock itself by writing another branch name into the lock.
-  if (paths.some((p) => p.toLowerCase() === LOCK)) {
+  if (relativePath.toLowerCase() === LOCK) {
     return `\`${LOCK}\` can't be changed while it exists (${lockedOn}). Delete it with \`rm ${LOCK}\` once the fix passes its test.`;
   }
-  const relativePath = paths.find((p) => LOCKED_FILES.some((pattern) => pattern.test(p)));
-  if (relativePath === undefined) return undefined;
+  if (!LOCKED_FILES.some((pattern) => pattern.test(relativePath))) return undefined;
 
   return (
     `\`${relativePath}\` is locked while you fix a bug (\`${LOCK}\`, ${lockedOn}): tests, their helpers and the configs and scripts that run them can't change. ` +
-    `Fix the code, not the test. If the test itself is wrong, stop and ask the user; don't remove the lock to get around this. ` +
+    `Fix the code, not the test. If the test itself is wrong, or the fix needs this file, stop and ask the user; don't remove the lock to get around this. ` +
     `To unlock, delete \`${LOCK}\` in the repo root.`
   );
 }

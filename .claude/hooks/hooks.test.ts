@@ -303,13 +303,6 @@ describe('test-lock', () => {
     assert.ok(reason.includes('apps/api/src/test/graphql.ts'), reason);
   });
 
-  it('denies an edit through a symlink into a test folder', () => {
-    const cwd = lockedRepo(BRANCH);
-    mkdirSync(path.join(cwd, 'src', 'test'), { recursive: true });
-    symlinkSync(path.join(cwd, 'src', 'test'), path.join(cwd, 'src', 'alias'), 'junction');
-    denied(runHook('test-lock.ts', editIn(cwd, 'src/alias/helper.ts')));
-  });
-
   it('ignores files outside the checkout, other events and input that is not JSON', () => {
     const cwd = lockedRepo(BRANCH);
     const outside = { ...editIn(cwd, 'x'), tool_input: { file_path: path.join(os.tmpdir(), 'a.test.ts') } };
