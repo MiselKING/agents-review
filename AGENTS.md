@@ -64,3 +64,4 @@ Before finishing any change, run and pass:
 - Branches: `<type>/<issue-number>-<slug>`, e.g. `feat/12-member-table`. Agent tools that use their own prefix (`claude/`, `copilot/`) keep it.
 - Commits: Conventional Commits with the package as scope, e.g. `feat(web): add member table`.
 - PRs: open as draft. Title: Conventional Commits, like a commit; it becomes the squash commit on `main`. Description: what changed, why, how you tested it, and `Closes #<issue>`.
+- `agent:build` can't change `.github/`, `.claude/`, `.devcontainer/`, `.githooks/`, AGENTS.md, CLAUDE.md, REVIEW.md or `.mcp.json`: `publish` refuses the whole patch. Build that work locally.
