@@ -208,7 +208,7 @@ function denied(result: HookResult): string {
 }
 
 describe('test-lock', () => {
-  const testFiles = [
+  const lockedFiles = [
     'packages/shared/src/audience-filter.test.ts',
     'apps/web/src/audiences/AudienceListPage.test.tsx',
     'apps/api/src/sync-runs.db.test.ts',
@@ -216,9 +216,12 @@ describe('test-lock', () => {
     'apps/api/src/test/graphql.ts',
     'apps/api/vitest.db.config.ts',
     'apps/web/playwright.config.ts',
+    'apps/api/package.json',
+    'package.json',
+    'turbo.json',
   ];
 
-  for (const file of testFiles) {
+  for (const file of lockedFiles) {
     it(`denies an edit to ${file} while locked`, () => {
       const reason = denied(runHook('test-lock.ts', editIn(lockedRepo(BRANCH), file)));
       assert.ok(reason.includes(file), reason);
@@ -288,6 +291,23 @@ describe('test-lock', () => {
     const link = path.join(linkDir, 'repo');
     symlinkSync(lockedRepo(BRANCH), link, 'junction');
     denied(runHook('test-lock.ts', editIn(link, 'src/foo.test.ts')));
+  });
+
+  it('denies an edit to a test path that is a symlink to other code', () => {
+    const cwd = lockedRepo(BRANCH);
+    const fixtures = path.join(cwd, 'packages', 'shared', 'fixtures');
+    mkdirSync(fixtures, { recursive: true });
+    mkdirSync(path.join(cwd, 'apps', 'api', 'src'), { recursive: true });
+    symlinkSync(fixtures, path.join(cwd, 'apps', 'api', 'src', 'test'), 'junction');
+    const reason = denied(runHook('test-lock.ts', editIn(cwd, 'apps/api/src/test/graphql.ts')));
+    assert.ok(reason.includes('apps/api/src/test/graphql.ts'), reason);
+  });
+
+  it('denies an edit through a symlink into a test folder', () => {
+    const cwd = lockedRepo(BRANCH);
+    mkdirSync(path.join(cwd, 'src', 'test'), { recursive: true });
+    symlinkSync(path.join(cwd, 'src', 'test'), path.join(cwd, 'src', 'alias'), 'junction');
+    denied(runHook('test-lock.ts', editIn(cwd, 'src/alias/helper.ts')));
   });
 
   it('ignores files outside the checkout, other events and input that is not JSON', () => {
