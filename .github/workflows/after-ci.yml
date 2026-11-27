@@ -269,7 +269,9 @@ jobs:
           REVIEW: ${{ needs.claude-review.outputs.review }}
         run: |
           # A push during Claude's review is a commit it didn't read; that commit gets its own review after its CI.
-          if [ "$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)" != "$HEAD_SHA" ]; then
+          # Assigned first, so a failed lookup fails the step instead of looking like a moved head.
+          head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          if [ "$head" != "$HEAD_SHA" ]; then
             echo "::notice::The PR moved past $HEAD_SHA during the review, so the review isn't posted."
             exit 0
           fi
