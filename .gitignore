@@ -18,6 +18,8 @@ blob-report/
 # Claude Code: personal settings and worktrees
 .claude/settings.local.json
 .claude/worktrees/
+# Locks test files while the fix-bug skill fixes the code
+.test-lock
 
 # Logs and OS/editor files
 *.log

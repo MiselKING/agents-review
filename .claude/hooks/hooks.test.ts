@@ -172,3 +172,103 @@ describe('check-before-stop', () => {
     assert.deepEqual(runHook('check-before-stop.ts', 'not json', stopChecks(FAIL)), SILENT);
   });
 });
+
+const BRANCH = 'fix/1-x';
+
+/** A checkout on BRANCH, with `.test-lock` holding `lock`, or no lock when it's undefined. */
+function lockedRepo(lock?: string): string {
+  const dir = tempRepo(BRANCH, { changed: false });
+  if (lock !== undefined) writeFileSync(path.join(dir, '.test-lock'), lock);
+  return dir;
+}
+
+const editIn = (cwd: string, file: string, tool = 'Edit') => ({
+  hook_event_name: 'PreToolUse',
+  tool_name: tool,
+  cwd,
+  tool_input: { [tool === 'NotebookEdit' ? 'notebook_path' : 'file_path']: path.join(cwd, file) },
+});
+
+/** The reason the hook denied the edit; fails the test if it didn't. */
+function denied(result: HookResult): string {
+  assert.equal(result.status, 0, result.stderr);
+  const output = parseObject(result.stdout).hookSpecificOutput;
+  assert.ok(isRecord(output), result.stdout);
+  assert.equal(output.hookEventName, 'PreToolUse');
+  assert.equal(output.permissionDecision, 'deny');
+  return String(output.permissionDecisionReason);
+}
+
+describe('test-lock', () => {
+  const testFiles = [
+    'packages/shared/src/audience-filter.test.ts',
+    'apps/web/src/audiences/AudienceListPage.test.tsx',
+    'apps/api/src/sync-runs.db.test.ts',
+    'apps/web/e2e/audiences.spec.ts',
+    'apps/api/src/test/graphql.ts',
+    'apps/api/vitest.db.config.ts',
+    'apps/web/playwright.config.ts',
+  ];
+
+  for (const file of testFiles) {
+    it(`denies an edit to ${file} while locked`, () => {
+      const reason = denied(runHook('test-lock.ts', editIn(lockedRepo(BRANCH), file)));
+      assert.ok(reason.includes(file), reason);
+      assert.ok(reason.includes(`branch \`${BRANCH}\``), reason);
+      assert.match(reason, /delete `\.test-lock`/);
+    });
+  }
+
+  it('denies a Write and a NotebookEdit too', () => {
+    const cwd = lockedRepo(BRANCH);
+    denied(runHook('test-lock.ts', editIn(cwd, 'src/foo.test.ts', 'Write')));
+    denied(runHook('test-lock.ts', editIn(cwd, 'apps/api/src/test/notes.ipynb', 'NotebookEdit')));
+  });
+
+  it('denies a change to the lock itself while it exists', () => {
+    const reason = denied(runHook('test-lock.ts', editIn(lockedRepo(BRANCH), '.test-lock', 'Write')));
+    assert.match(reason, /rm \.test-lock/);
+  });
+
+  it('allows creating the lock', () => {
+    assert.deepEqual(runHook('test-lock.ts', editIn(lockedRepo(), '.test-lock', 'Write')), SILENT);
+  });
+
+  it('allows edits to code while locked', () => {
+    const cwd = lockedRepo(BRANCH);
+    assert.deepEqual(runHook('test-lock.ts', editIn(cwd, 'apps/api/src/sync-runs.ts')), SILENT);
+    assert.deepEqual(runHook('test-lock.ts', editIn(cwd, 'README.md')), SILENT);
+  });
+
+  it('allows edits to tests without a lock', () => {
+    const result = runHook('test-lock.ts', editIn(lockedRepo(), 'src/foo.test.ts'));
+    assert.deepEqual(result, SILENT);
+  });
+
+  it('ignores a lock left on another branch', () => {
+    const result = runHook('test-lock.ts', editIn(lockedRepo('fix/2-other'), 'src/foo.test.ts'));
+    assert.deepEqual(result, SILENT);
+  });
+
+  it('treats an empty lock as locked', () => {
+    const reason = denied(runHook('test-lock.ts', editIn(lockedRepo('\n'), 'src/foo.test.ts')));
+    assert.match(reason, /an empty lock/);
+  });
+
+  it('finds the lock from a package folder', () => {
+    const cwd = lockedRepo(BRANCH);
+    const packageDir = path.join(cwd, 'apps', 'web');
+    mkdirSync(packageDir, { recursive: true });
+    const input = { ...editIn(cwd, 'apps/web/src/foo.test.ts'), cwd: packageDir };
+    denied(runHook('test-lock.ts', input));
+  });
+
+  it('ignores files outside the checkout, other events and input that is not JSON', () => {
+    const cwd = lockedRepo(BRANCH);
+    const outside = { ...editIn(cwd, 'x'), tool_input: { file_path: path.join(os.tmpdir(), 'a.test.ts') } };
+    assert.deepEqual(runHook('test-lock.ts', outside), SILENT);
+    const other = { ...editIn(cwd, 'src/foo.test.ts'), hook_event_name: 'PostToolUse' };
+    assert.deepEqual(runHook('test-lock.ts', other), SILENT);
+    assert.deepEqual(runHook('test-lock.ts', 'not json'), SILENT);
+  });
+});

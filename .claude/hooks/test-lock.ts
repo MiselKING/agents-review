@@ -1,0 +1,82 @@
+// PreToolUse hook for Edit, Write and NotebookEdit: while `.test-lock` exists, Claude fixes the code, not the test.
+// The fix-bug skill creates and removes the lock. Bash can still change files; review is the backstop for that.
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+
+import {
+  currentBranch,
+  editedFilePath,
+  projectRoot,
+  readHookInput,
+  relativeToRoot,
+  repoRoot,
+  workingDir,
+} from './lib.ts';
+
+const LOCK = '.test-lock';
+
+// Tests, the helpers they share, and the configs that decide which tests run.
+const TEST_FILES = [
+  /\.test\.tsx?$/i,
+  /^apps\/web\/e2e\//i,
+  /(^|\/)src\/test\//i,
+  /(^|\/)vitest[^/]*\.config\.ts$/i,
+  /(^|\/)playwright\.config\.ts$/i,
+];
+
+/** The lock's branch: '' when the file is empty or unreadable, which still locks. */
+function readLock(file: string): string {
+  try {
+    return readFileSync(file, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Why the edit is refused, or undefined to let it through. */
+async function denyReason(): Promise<string | undefined> {
+  const input = await readHookInput();
+  if (input === undefined || (input.hook_event_name ?? 'PreToolUse') !== 'PreToolUse') {
+    return undefined;
+  }
+  const filePath = editedFilePath(input);
+  if (filePath === undefined) return undefined;
+
+  // The checkout's top folder, also when Claude's shell is in a package folder or a worktree.
+  const root = repoRoot(workingDir(input, projectRoot(input)));
+  const lockFile = path.join(root, LOCK);
+  if (!existsSync(lockFile)) return undefined;
+
+  // A lock left behind on another branch doesn't block later work.
+  const branch = readLock(lockFile);
+  if (branch !== '' && branch !== currentBranch(root)) return undefined;
+
+  const relativePath = relativeToRoot(filePath, root);
+  if (relativePath === undefined) return undefined;
+
+  const lockedOn = branch === '' ? 'an empty lock' : `branch \`${branch}\``;
+  // Otherwise Claude could unlock itself by writing another branch name into the lock.
+  if (relativePath.toLowerCase() === LOCK) {
+    return `\`${LOCK}\` can't be changed while it exists (${lockedOn}). Delete it with \`rm ${LOCK}\` once the fix passes its test.`;
+  }
+  if (!TEST_FILES.some((pattern) => pattern.test(relativePath))) return undefined;
+
+  return (
+    `\`${relativePath}\` is a test file, and test files are locked while you fix a bug (\`${LOCK}\`, ${lockedOn}). ` +
+    `Fix the code, not the test. If the test itself is wrong, stop and ask the user; don't remove the lock to get around this. ` +
+    `To unlock, delete \`${LOCK}\` in the repo root.`
+  );
+}
+
+const reason = await denyReason();
+if (reason !== undefined) {
+  console.log(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: reason,
+      },
+    }),
+  );
+}

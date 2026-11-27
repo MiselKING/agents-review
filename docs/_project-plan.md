@@ -53,7 +53,7 @@ Agents now cover the whole lifecycle, not just writing code. In Anthropic's 2026
 | Dependency updates | Bot opens upgrade PRs, agent fixes the breaking ones | Renovate; an `@claude` comment on a breaking PR, since the automatic CI fix skips Renovate PRs |
 | Security review | Extra checks when sensitive paths change | A "Sensitive paths" checklist in REVIEW.md that every reviewer goes through when a PR changes `services/sync-worker/`, `.github/`, `.devcontainer/`, `.claude/`, agent config or config files |
 | Tests | Generate and extend tests, check UI visually | A test-writing skill; Playwright screenshots the agent looks at |
-| Maintenance | Label issues, sync docs | Weekly docs-sync job. No issue triage while issues come only from you, through `write-issue` (#66) |
+| Maintenance | Label issues, sync docs | Neither. No issue triage while issues come only from you, through `write-issue` (#66). No docs-sync job: REVIEW.md flags a PR that changes commands, ports, setup or env vars without updating the docs |
 | Tool access (MCP) | Agents query CI, logs, tickets | GitHub's MCP server + one custom MCP server |
 | Cloud environments | Isolated environments for agents | Dev container with a firewall, also usable in Codespaces |
 | Non-engineers | Small change requests from outside engineering | An issue form in, a PR with screenshots out |
@@ -97,11 +97,12 @@ agents-review/
 
 - **AGENTS.md** is the one rule file for every tool: commands, package boundaries, conventions, "never do" rules, definition of done. Keep it short. Claude Code reads AGENTS.md only when no CLAUDE.md exists, so the root CLAUDE.md imports it, and every nested AGENTS.md needs a one-line CLAUDE.md beside it. Copilot reads AGENTS.md natively, nested ones too. Add nested files and `.claude/rules/` only when a mistake repeats.
 - **Permissions** mirror AGENTS.md: deny what it says never to do, ask before what it says to ask about, allow the project checks. Agent config (AGENTS.md, CLAUDE.md, REVIEW.md, `.claude/`, `.githooks/`) is `ask` on your machine, so you can approve an edit. In the dev container, where nobody watches, a managed settings file baked into the image denies it. Only `deny` rules also cover shell writes such as `>>` redirects; `ask` rules cover only the file tools.
-- **Hooks** enforce, because instructions are only context. They are TypeScript files run directly by Node, so they work on Windows and in the dev container. The Claude runs in GitHub Actions turn them off (see "Agent commands in CI"). Today there are two:
+- **Hooks** enforce, because instructions are only context. They are TypeScript files run directly by Node, so they work on Windows and in the dev container. The Claude runs in GitHub Actions turn them off (see "Agent commands in CI"). Today there are three:
+  - Before each edit, the test lock refuses edits to test files while `.test-lock` exists (see "Failing test first").
   - After each edit, oxfmt formats the edited file, then Oxlint lints it.
   - Before Claude finishes, lint and typecheck must pass when the working tree has changes. The hook blocks once, then lets Claude stop with a warning, so it can't loop. `--max-turns` is the real limit in headless runs. Tests and codegen aren't checked here: Stop fires after every reply, also mid-task, when a failing test can be on purpose.
 - **Git hooks** (`.githooks/`) run for every agent and person, however the commit or push was started: `pre-commit` refuses commits on `main`, and `pre-push` refuses pushes to `main`. They stay instant on purpose: the definition of done runs in CI, which is the real gate together with the rulesets, so there's no reason to skip them. `pnpm install` turns them on through the `prepare` script; an existing checkout runs `pnpm run prepare` once, since `pnpm install` skips it when nothing changed.
-- **Failing test first** (Phase 5): the `fix-bug` skill writes a test that reproduces the bug, confirms it fails, then creates a gitignored lock file in the repo root. While the lock exists, a PreToolUse hook blocks edits to test files, so the agent fixes the code instead of weakening the test. That needs a hook, because a static rule can't depend on the lock. The hook covers only the Edit and Write tools, so CI backs it up: on PRs labelled `bug`, the new tests must fail on `main` and pass on the branch.
+- **Failing test first** (Phase 5, #68): the `fix-bug` skill writes a test that reproduces the bug, shows it failing, then writes the branch name into a gitignored `.test-lock` in the repo root. While the lock exists, a PreToolUse hook blocks edits to test files, test helpers (`src/test/`), test configs and the lock itself, so the agent fixes the code instead of weakening the test. That needs a hook, because a static rule can't depend on the lock. A lock from another branch is ignored, so one left behind blocks nothing; an empty one still locks. The hook covers only the file tools (Edit, Write, NotebookEdit), not Bash, and Claude runs in GitHub Actions have no hooks, so there the skill only writes the test first. A CI check that the new tests fail on `main` is left for later, to decide after trying the skill on a practice bug: no common CI setup does it, only benchmarks such as SWE-bench ("FAIL_TO_PASS" tests).
 - **REVIEW.md** is the review policy: three passes (bugs, security, match with acceptance criteria), what counts as Important versus a nit, at most 5 nits, and what to skip. Copilot code review reads it automatically. CodeRabbit and the Claude Code Action don't: list it in `.coderabbit.yaml` under `knowledge_base.code_guidelines.filePatterns`, and name it in the Claude review prompt.
 - **Skills** are repeatable workflows the agent pulls in when relevant. `write-issue` runs only when you call it.
 - **`.mcp.json`** holds GitHub's MCP server (run from its Docker image with a fine-grained token, toolsets limited so there's no merge tool) and your custom server.
@@ -131,7 +132,6 @@ Both loops send work back to an agent, not to you. You see a PR once CI is green
 | Flow | Trigger | Agent | You |
 | --- | --- | --- | --- |
 | Dependency update | Renovate opens an upgrade PR (weekly) | If CI fails, Claude adapts the code when you ask with `@claude`; no automatic fix or review on Renovate PRs | Comment `@claude` with the failure if CI fails; approve and merge |
-| Docs sync | Weekly schedule | Claude compares docs to code and opens a PR | Review and merge |
 | Visual change | Someone files the "visual change" form; you add the `agent:build` label | Claude edits copy or styles and adds before/after screenshots | Check the screenshots, merge |
 
 **Always on, no AI:** CodeQL, secret scanning and Dependabot alerts.
@@ -228,7 +228,7 @@ Everything costs $0 while the repo stays public, except the optional Copilot com
 
 ## Build plan
 
-Eight phases, in order, with no fixed timeline. If time runs short, cut the custom MCP server to one tool and skip the docs-sync job, but keep Phase 7: the evals are what make the project count.
+Eight phases, in order, with no fixed timeline. If time runs short, cut the custom MCP server to one tool, but keep Phase 7: the evals are what make the project count.
 
 **You** = done by hand. **Agent** = Claude Code does it and you review. Log every agent failure in `docs/private/agent-log.md` with the cause and the fix; it's the most useful part of the write-up.
 
@@ -280,8 +280,9 @@ Four of the six product features. The other two, member table and run history pa
 - ✅ **You:** turn on CodeQL and Dependabot alerts (secret scanning is already on). 
 - ✅ **Agent:** path-triggered security review, as a "Sensitive paths" checklist in REVIEW.md. A second, security-only Claude review was tried on #52 and found nothing (#65).
 - **Dropped:** issue triage on open (#66). Claude would run only for people with write access, so only for your issues, which `write-issue` already shapes. Revisit if people outside the repo start filing issues.
-- [ ] **Agent drafts, you review:** the weekly docs-sync workflow.
-- [ ] **Agent drafts, you review:** `fix-bug` skill, test-lock hook, and the CI check for bug PRs. **You:** seed one extra bug (not an eval bug) and try it.
+- **Dropped:** the weekly docs-sync workflow. Claude would reread every doc and the code behind it each week, which costs more as the repo grows, and it can't run commands to check what it reads. REVIEW.md already flags missing doc updates in the PR that causes them.
+- ✅ **Agent drafts, you review:** `fix-bug` skill and test-lock hook (#68). **You:** seed one extra bug (not an eval bug) and try it.
+- [ ] Decide after that trial: the CI check that a bug PR's new tests fail on `main` and pass on the branch.
 
 **Phase 6: Tools and visual checks**
 

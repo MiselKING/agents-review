@@ -74,12 +74,11 @@ Flow: issue → agent builds on a branch → draft PR → CI → AI review → m
 ![An issue labelled agent goes to an agent that builds on a CI runner and opens a draft PR. CI checks run; red CI goes back to a fix agent, green goes to AI review by Claude and CodeRabbit, then my review, then merge. Requested changes go back to the agent.](docs/agent_pr_loop.png)
 - Agents: Claude Code (main, local + Claude Code Action in GitHub), Copilot cloud agent (optional comparison, one month of Copilot Pro)
 - Reviewers: Claude, CodeRabbit, Copilot code review (about 5 PRs)
-- Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills, hooks in `.claude/hooks/` (format and lint after each edit, lint and typecheck before Claude finishes), git hooks in `.githooks/` for every agent and person (no commit or push on `main`; `pnpm install` turns them on), `.mcp.json`, dev container with a default-deny firewall, where agents can't edit agent config. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
+- Agent config: AGENTS.md (rules for every agent), CLAUDE.md (`@AGENTS.md`), `.claude/settings.json` (Claude permissions: what's blocked and what needs approval), REVIEW.md, skills (`fix-bug` writes a failing test before the fix), hooks in `.claude/hooks/` (test files locked while `fix-bug` fixes the code, format and lint after each edit, lint and typecheck before Claude finishes), git hooks in `.githooks/` for every agent and person (no commit or push on `main`; `pnpm install` turns them on), `.mcp.json`, dev container with a default-deny firewall, where agents can't edit agent config. For all agents, GitHub rulesets on `main` and CI checks are what enforce the rules. Details in the plan.
 - Writing issues: the issue forms on GitHub, or `/write-issue` in Claude Code with short notes (format in `.claude/skills/write-issue/SKILL.md`)
 - Side flows:
   - Renovate dependency PRs
   - Dependabot alerts + CodeQL in project settings
-  - Weekly docs sync
   - Visual change requests
 - Measurement: 12 fixed tasks, run with a bare setup (Phase 4) and the full setup (Phase 7), 2 runs each
 - All tools free on a public repo. The only paid extra is the optional Copilot comparison: one month of Copilot Pro ($10).

@@ -23,11 +23,12 @@ export async function readHookInput(): Promise<HookInput | undefined> {
   }
 }
 
-/** The file an Edit or Write call targets, if the input has one. */
+/** The file an Edit, Write or NotebookEdit call targets, if the input has one. */
 export function editedFilePath(input: HookInput | undefined): string | undefined {
   const toolInput = input?.tool_input;
   if (!isRecord(toolInput)) return undefined;
-  return typeof toolInput.file_path === 'string' ? toolInput.file_path : undefined;
+  const filePath = toolInput.file_path ?? toolInput.notebook_path;
+  return typeof filePath === 'string' ? filePath : undefined;
 }
 
 /** The top folder of the git checkout `cwd` is in (a worktree's own folder), or `cwd` outside one. */
@@ -35,6 +36,12 @@ export function repoRoot(cwd: string): string {
   const result = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' });
   const top = result.status === 0 ? result.stdout.trim() : '';
   return top === '' ? cwd : path.resolve(top);
+}
+
+/** The checked-out branch, or '' in detached HEAD or outside a git checkout. */
+export function currentBranch(cwd: string): string {
+  const result = spawnSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf8' });
+  return result.status === 0 ? result.stdout.trim() : '';
 }
 
 /** Whether the working tree has changes. True when git can't tell, so checks still run. */
