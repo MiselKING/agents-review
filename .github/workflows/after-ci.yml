@@ -8,7 +8,7 @@ run-name: >-
   }}
 
 # CI finished on a PR. Passed: mark a draft ready, Claude reviews, then CodeRabbit is asked to once you approve.
-# Failed: Claude tries one fix per PR (claude-work.yml does the work).
+# Failed: Claude tries one fix per PR (claude-work.yml does the work). Claude neither reviews nor fixes Renovate PRs.
 # GitHub runs this file as it is on main, also for PRs that change it.
 on:
   workflow_run:
@@ -36,6 +36,7 @@ jobs:
     outputs:
       number: ${{ steps.find.outputs.number }}
       draft: ${{ steps.find.outputs.draft }}
+      renovate: ${{ steps.find.outputs.renovate }}
     steps:
       - id: find
         name: Find the open PR CI ran for
@@ -46,12 +47,13 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           # The PRs the CI run itself names, not any PR that happens to share its branch.
           PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+          ACTOR: ${{ github.actor }}
         run: |
           open=''
           for n in $(jq -r '.[].number' <<< "$PRS"); do
             pr=$(gh api "repos/$REPO/pulls/$n")
             if [ "$(jq -r --arg sha "$HEAD_SHA" '.state == "open" and .head.sha == $sha' <<< "$pr")" = true ]; then
-              open="$open $n:$(jq -r .draft <<< "$pr")"
+              open="$open $n:$(jq -r '"\(.draft):\(.user.login)"' <<< "$pr")"
             fi
           done
           read -r -a found <<< "$open"
@@ -65,8 +67,14 @@ jobs:
             echo "::notice::Several open PRs are at $HEAD_SHA (${found[*]}); none is handled automatically."
             exit 0
           fi
-          echo "number=${found[0]%%:*}" >> "$GITHUB_OUTPUT"
-          echo "draft=${found[0]#*:}" >> "$GITHUB_OUTPUT"
+          IFS=: read -r number draft author <<< "${found[0]}"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+          # The action refuses bots not in allowed_bots (#64). The PR's author also covers a person re-running its CI.
+          if [ "$author" = 'renovate[bot]' ] || [ "$ACTOR" = 'renovate[bot]' ]; then
+            echo "::notice::#$number is a Renovate PR, so Claude doesn't review or fix it: the action refuses bots not in allowed_bots."
+            echo "renovate=true" >> "$GITHUB_OUTPUT"
+          fi
 
   mark-ready:
     needs: pr
@@ -105,7 +113,12 @@ jobs:
 
   claude-review:
     needs: pr
-    if: ${{ github.event.workflow_run.conclusion == 'success' && needs.pr.outputs.number != '' }}
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        needs.pr.outputs.number != '' &&
+        needs.pr.outputs.renovate != 'true'
+      }}
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     environment: claude
@@ -255,6 +268,13 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           REVIEW: ${{ needs.claude-review.outputs.review }}
         run: |
+          # A push during Claude's review is a commit it didn't read; that commit gets its own review after its CI.
+          # Assigned first, so a failed lookup fails the step instead of looking like a moved head.
+          head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          if [ "$head" != "$HEAD_SHA" ]; then
+            echo "::notice::The PR moved past $HEAD_SHA during the review, so the review isn't posted."
+            exit 0
+          fi
           printf '%s' "$REVIEW" | jq --arg sha "$HEAD_SHA" \
             '{commit_id: $sha, event: "COMMENT", body: .summary,
               comments: [.comments[] | {path, line, side: "RIGHT", body}]}' > "$RUNNER_TEMP/review.json"
@@ -312,7 +332,12 @@ jobs:
   # an earlier fix still waiting there can be skipped, and then this request is the one that should run.
   fix-check:
     needs: pr
-    if: ${{ github.event.workflow_run.conclusion == 'failure' && needs.pr.outputs.number != '' }}
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'failure' &&
+        needs.pr.outputs.number != '' &&
+        needs.pr.outputs.renovate != 'true'
+      }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
