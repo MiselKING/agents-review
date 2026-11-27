@@ -53,7 +53,7 @@ Agents now cover the whole lifecycle, not just writing code. In Anthropic's 2026
 | Dependency updates | Bot opens upgrade PRs, agent fixes the breaking ones | Renovate; an `@claude` comment on a breaking PR, since the automatic CI fix skips Renovate PRs |
 | Security review | Extra checks when sensitive paths change | A "Sensitive paths" checklist in REVIEW.md that every reviewer goes through when a PR changes `services/sync-worker/`, `.github/`, `.devcontainer/`, `.claude/`, agent config or config files |
 | Tests | Generate and extend tests, check UI visually | A test-writing skill; Playwright screenshots the agent looks at |
-| Maintenance | Label issues, sync docs | Issue triage on open; weekly docs-sync job |
+| Maintenance | Label issues, sync docs | Weekly docs-sync job. No issue triage while issues come only from you, through `write-issue` (#66) |
 | Tool access (MCP) | Agents query CI, logs, tickets | GitHub's MCP server + one custom MCP server |
 | Cloud environments | Isolated environments for agents | Dev container with a firewall, also usable in Codespaces |
 | Non-engineers | Small change requests from outside engineering | An issue form in, a PR with screenshots out |
@@ -119,7 +119,7 @@ Both loops send work back to an agent, not to you. You see a PR once CI is green
 
 | Step | Trigger | Agent | You |
 | --- | --- | --- | --- |
-| 1 | Issue opened | Claude labels it and asks for missing acceptance criteria | Draft it with `write-issue`; answer questions |
+| 1 | Issue opened | — | Draft it with `write-issue`, which uses the forms and asks for checkable acceptance criteria |
 | 2 | You add the `agent:build` label. For features, ask for a plan first: the `agent:plan` label or an `@claude plan` comment | Claude posts a plan (features), then builds from the approved plan, runs tests and pushes; a workflow step opens the draft PR | Features: read the plan, correct it in a comment, then add the label to approve |
 | 3 | CI fails | Claude reads the failed log and pushes one fix | Take over if it fails again |
 | 4 | CI passes | A draft PR is marked ready. On a ready PR, Claude reviews it against REVIEW.md and CodeRabbit is asked to review; if sensitive paths changed, both also go through REVIEW.md's security checklist | Read the reviews |
@@ -279,7 +279,7 @@ Four of the six product features. The other two, member table and run history pa
 - ✅ **You:** install Renovate. **Agent:** `renovate.json` with `minimumReleaseAge` of at least 3 days.
 - ✅ **You:** turn on CodeQL and Dependabot alerts (secret scanning is already on). 
 - ✅ **Agent:** path-triggered security review, as a "Sensitive paths" checklist in REVIEW.md. A second, security-only Claude review was tried on #52 and found nothing (#65).
-- [ ] **Agent:** issue triage on open (#66).
+- **Dropped:** issue triage on open (#66). Claude would run only for people with write access, so only for your issues, which `write-issue` already shapes. Revisit if people outside the repo start filing issues.
 - [ ] **Agent drafts, you review:** the weekly docs-sync workflow.
 - [ ] **Agent drafts, you review:** `fix-bug` skill, test-lock hook, and the CI check for bug PRs. **You:** seed one extra bug (not an eval bug) and try it.
 
