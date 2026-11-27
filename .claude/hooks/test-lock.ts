@@ -1,6 +1,6 @@
 // PreToolUse hook for Edit, Write and NotebookEdit: while `.test-lock` exists, Claude fixes the code, not the test.
 // The fix-bug skill creates and removes the lock. Bash can still change files; review is the backstop for that.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import {
@@ -33,6 +33,19 @@ function readLock(file: string): string {
   }
 }
 
+/** `file` with symlinks resolved, as git resolves the top folder. A new file doesn't exist yet, so its nearest existing folder is resolved. */
+function resolvePath(file: string, root: string): string {
+  let existing = path.resolve(root, file);
+  const rest: string[] = [];
+  while (!existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) return path.resolve(root, file);
+    rest.unshift(path.basename(existing));
+    existing = parent;
+  }
+  return path.join(realpathSync.native(existing), ...rest);
+}
+
 /** Why the edit is refused, or undefined to let it through. */
 async function denyReason(): Promise<string | undefined> {
   const input = await readHookInput();
@@ -43,15 +56,16 @@ async function denyReason(): Promise<string | undefined> {
   if (filePath === undefined) return undefined;
 
   // The checkout's top folder, also when Claude's shell is in a package folder or a worktree.
-  const root = repoRoot(workingDir(input, projectRoot(input)));
+  const root = realpathSync.native(repoRoot(workingDir(input, projectRoot(input))));
   const lockFile = path.join(root, LOCK);
   if (!existsSync(lockFile)) return undefined;
 
-  // A lock left behind on another branch doesn't block later work.
+  // A lock left behind on another branch doesn't block later work. In detached HEAD (a rebase or bisect) it still locks.
   const branch = readLock(lockFile);
-  if (branch !== '' && branch !== currentBranch(root)) return undefined;
+  const head = currentBranch(root);
+  if (branch !== '' && head !== '' && branch !== head) return undefined;
 
-  const relativePath = relativeToRoot(filePath, root);
+  const relativePath = relativeToRoot(resolvePath(filePath, root), root);
   if (relativePath === undefined) return undefined;
 
   const lockedOn = branch === '' ? 'an empty lock' : `branch \`${branch}\``;

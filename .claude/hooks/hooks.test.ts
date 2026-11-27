@@ -3,7 +3,15 @@
 /* oxlint-disable typescript/no-floating-promises -- node:test's describe() and it() return promises that the test runner itself awaits */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -261,6 +269,25 @@ describe('test-lock', () => {
     mkdirSync(packageDir, { recursive: true });
     const input = { ...editIn(cwd, 'apps/web/src/foo.test.ts'), cwd: packageDir };
     denied(runHook('test-lock.ts', input));
+  });
+
+  it('still locks in detached HEAD', () => {
+    const cwd = lockedRepo(BRANCH);
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd });
+      assert.equal(result.status, 0, String(result.stderr));
+    };
+    git('commit', '--quiet', '--allow-empty', '-m', 'x');
+    git('checkout', '--quiet', '--detach');
+    denied(runHook('test-lock.ts', editIn(cwd, 'src/foo.test.ts')));
+  });
+
+  it('denies an edit through a symlink to the checkout', () => {
+    const linkDir = mkdtempSync(path.join(os.tmpdir(), 'hook-link-'));
+    tempDirs.push(linkDir);
+    const link = path.join(linkDir, 'repo');
+    symlinkSync(lockedRepo(BRANCH), link, 'junction');
+    denied(runHook('test-lock.ts', editIn(link, 'src/foo.test.ts')));
   });
 
   it('ignores files outside the checkout, other events and input that is not JSON', () => {
